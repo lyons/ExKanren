@@ -49,7 +49,8 @@ defmodule MiniKanren.Impure do
   end
   
   @doc """     
-  `condu` something something something.
+  `condu` is similar to `conda`, but takes only a single result from the first
+  goal of the first successful clause.
   
   ## Examples:
   

@@ -51,7 +51,8 @@ defmodule MiniKanren.Core do
   end
   
   @doc """
-  `conde` something something something.
+  `conde` accepts two or more clauses made of lists of goals, and returns the
+  logical disjunction of these clauses.
   
   ## Examples
   

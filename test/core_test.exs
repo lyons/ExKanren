@@ -71,4 +71,10 @@ defmodule MKCoreTest do
     assert(unify({var(0), :foo, 1}, {2, :foo, var(1)}, empty_substitution) == result)
     assert(unify({var(0), :foo, 1}, {2, :bar, var(1)}, empty_substitution) == nil)
   end
+
+  test "allow for single-case conde" do
+    assert [_]  = ( run_all [],  do: ( conde do: [succeed] ) )
+    assert []  == ( run_all [],  do: ( conde do: [fail]    ) )
+    assert [1] == ( run_all [q], do: ( conde do: [eq(q,1)] ) )
+  end
 end

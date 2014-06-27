@@ -80,7 +80,11 @@ defmodule MiniKanren.Core do
     seqs = Enum.map(cases, fn seq -> quote do: MK.conj_many(unquote(seq)) end)
     quote do: MK.disj_many(unquote(seqs))
   end
-  
+  defmacro conde([do: single_case]) do
+    call = {:__block__, [], [single_case]}
+    quote do: MK.conde(do: unquote(call))
+  end
+
   @doc """
   `fresh` accepts a list of one or more logic variables, and a block containing
   one or more goals. The logic variables are bound into the lexical scope of the

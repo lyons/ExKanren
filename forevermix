@@ -1,0 +1,13 @@
+#!/bin/sh
+if [ -z "$Elixir_src" ]; then
+    ctags_dirs=.
+else
+    ctags_dirs=". $Elixir_src/lib/elixir/lib"
+fi
+export TIMEFORMAT='%2U user %2S system %P%% cpu %R total' # bash/zsh same fmt
+
+while true; do 
+    if [ $? -eq 0 ]; then echo -n "Running tests "; mix test; fi
+    which ctags >/dev/null && ctags -R $ctags_dirs &
+    inotifywait -q -e modify lib/*.ex *.exs test/*.exs
+done

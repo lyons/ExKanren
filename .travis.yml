@@ -1,6 +1,6 @@
 language: erlang
 env:
-  - ELIXIR_VER=v0.14.1
+  - ELIXIR_VER=v0.14.2
 otp_release:
   - 17.0
 before_install:

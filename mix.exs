@@ -4,7 +4,7 @@ defmodule ExKanren.Mixfile do
   def project do
     [ app: :exKanren,
       version: "0.0.2",
-      elixir: "~> 0.14.0",
+      elixir: "~> 0.14.2",
       deps: deps ]
   end
 

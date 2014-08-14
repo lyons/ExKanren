@@ -5,7 +5,7 @@ defmodule MKCoreTest do
   import  MiniKanren.Core
   import  MiniKanren.Core.Functions
   
-  defp empty_substitution, do: HashDict.new
+  defp empty_substitution, do: Map.new
     
   test "vars are vars" do
     assert(var?(var(0)))
@@ -46,7 +46,7 @@ defmodule MKCoreTest do
   end
   
   test "unifying two distinct vars" do
-    result = HashDict.new([{var(0), var(1)}])
+    result = Enum.into [{var(0), var(1)}], Map.new
     assert(unify(var(0), var(1), empty_substitution) == result)
     
     assert(unify(var(1), var(0), unify(var(0), var(1), empty_substitution)) ==
@@ -54,21 +54,27 @@ defmodule MKCoreTest do
   end
   
   test "unifying lists" do
-    result = HashDict.new([{var(0), 2}, {var(1), 1}])
+    result = Enum.into [{var(0), 2}, {var(1), 1}], Map.new
     assert(unify([1, var(0)], [var(1), 2], empty_substitution) == result)
     assert(unify([1, var(0)], [2, 3],      empty_substitution) == nil)
     assert(unify([1, var(0)], [1, 2, 3],   empty_substitution) == nil)
   end
   
   test "unifying 2-tuples" do
-    result = HashDict.new([{var(0), 2}, {var(1), 1}])
+    result = Enum.into [{var(0), 2}, {var(1), 1}], Map.new
     assert(unify({1, var(0)}, {var(1), 2}, empty_substitution) == result)
     assert(unify({1, var(0)}, {2, 2},      empty_substitution) == nil)
   end
   
   test "unifying 3-tuples" do
-    result = HashDict.new([{var(0), 2}, {var(1), 1}])
+    result = Enum.into [{var(0), 2}, {var(1), 1}], Map.new
     assert(unify({var(0), :foo, 1}, {2, :foo, var(1)}, empty_substitution) == result)
     assert(unify({var(0), :foo, 1}, {2, :bar, var(1)}, empty_substitution) == nil)
+  end
+
+  test "allow for single-case conde" do
+    assert [_]  = ( run_all [],  do: ( conde do: [succeed] ) )
+    assert []  == ( run_all [],  do: ( conde do: [fail]    ) )
+    assert [1] == ( run_all [q], do: ( conde do: [eq(q,1)] ) )
   end
 end

@@ -192,13 +192,13 @@ defmodule MiniKanren.Impure.Functions do
   """
   def copy_term(u, v) do
     project([u]) do
-      eq(MK.walk_all(u, build_s(u, HashDict.new)), v)
+      eq(MK.walk_all(u, build_s(u, Map.new)), v)
     end
   end
   
   defp build_s(u, s) do
     case MK.var?(u) or u do
-      true    -> HashDict.put_new(s, u, MK.var(make_ref))
+      true    -> Dict.put_new(s, u, MK.var(make_ref))
       [h | t] -> build_s(t, build_s(h, s))
       _       -> s
     end

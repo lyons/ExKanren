@@ -80,7 +80,11 @@ defmodule MiniKanren.Core do
     seqs = Enum.map(cases, fn seq -> quote do: MK.conj_many(unquote(seq)) end)
     quote do: MK.disj_many(unquote(seqs))
   end
-  
+  defmacro conde([do: single_case]) do
+    call = {:__block__, [], [single_case]}
+    quote do: MK.conde(do: unquote(call))
+  end
+
   @doc """
   `fresh` accepts a list of one or more logic variables, and a block containing
   one or more goals. The logic variables are bound into the lexical scope of the
@@ -220,7 +224,7 @@ defmodule MiniKanren.Core do
   @doc """
   """
   def walk(u, s) do
-    case var?(u) and HashDict.get(s, u, false) do
+    case var?(u) and Dict.get(s, u, false) do
       false -> u
       val   -> walk(val, s)
     end
@@ -245,7 +249,7 @@ defmodule MiniKanren.Core do
     if occurs_check(x, v, s) do
       nil
     else
-      HashDict.put(s, x, v)
+      Dict.put(s, x, v)
     end
   end
   
@@ -355,7 +359,7 @@ defmodule MiniKanren.Core do
   end
 
   # Interface helpers
-  def empty_state, do: {HashDict.new, 0}
+  def empty_state, do: {Map.new, 0}
   def call_empty_state(g), do: g.(empty_state)
   
   def pull(s) when is_function(s), do: pull(s.())
@@ -382,7 +386,7 @@ defmodule MiniKanren.Core do
   
   def reify_state({s, _}) do
     v = walk_all(var(0), s)
-    walk_all(v, reify_s(v, HashDict.new))
+    walk_all(v, reify_s(v, Map.new))
   end
   
   def reify_s(v, s) do
@@ -392,8 +396,8 @@ defmodule MiniKanren.Core do
   end
   
   defp reify_s(v, true, s) do
-    n = reify_name(HashDict.size(s))
-    HashDict.put(s, v, n)
+    n = reify_name(Dict.size(s))
+    Dict.put(s, v, n)
   end
   defp reify_s([h | t], _, s), do: reify_s(t, reify_s(h, s))
   defp reify_s({a, b}, _, s),  do: reify_s(b, reify_s(a, s))

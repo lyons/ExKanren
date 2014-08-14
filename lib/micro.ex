@@ -70,7 +70,7 @@ defmodule MicroKanren do
   end
 
   # Interface helpers
-  def empty_state, do: {HashDict.new, 0}
+  def empty_state, do: {Map.new, 0}
   def call_empty_state(g), do: g.(empty_state)
   
   def pull(s) when is_function(s), do: pull(s.())
@@ -138,7 +138,7 @@ defmodule MicroKanren do
   @doc """
   """
   def walk(u, s) do
-    case var?(u) and HashDict.get(s, u, false) do
+    case var?(u) and Dict.get(s, u, false) do
       false -> u
       val -> walk(val, s)
     end
@@ -147,7 +147,7 @@ defmodule MicroKanren do
   @doc """
   """
   def ext_s(x, v, s) do
-    HashDict.put(s, x, v)
+    Dict.put(s, x, v)
   end
   
   @doc """

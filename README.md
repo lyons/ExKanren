@@ -1,6 +1,5 @@
 ExKanren
 ========
-[![Build Status](https://travis-ci.org/herenowcoder/ExKanren.svg?branch=master)](https://travis-ci.org/herenowcoder/ExKanren)
 
 Relational programming in Elixir, providing implementations of both µKanren (as described in *[μKanren: A Minimal Functional Core
 for Relational Programming](http://webyrd.net/scheme-2013/papers/HemannMuKanren2013.pdf)*), and miniKanren (mostly as described in *[Relational Programming in miniKanren: Techniques, Applications, and Implementations](https://scholarworks.iu.edu/dspace/bitstream/handle/2022/8777/Byrd_indiana_0093A_10344.pdf)*).

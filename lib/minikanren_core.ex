@@ -13,6 +13,12 @@ defmodule MiniKanren.Core do
     end
   end
   
+  # Typespecs
+  @type package :: {map(), non_neg_integer}
+  @type goal_stream :: :mzero | package | (() -> goal_stream) | nonempty_improper_list(package, (() -> goal_stream))
+  @type goal :: (package -> goal_stream)
+  @type logic_variable :: {non_neg_integer}
+  
   # miniKanren operators
   @doc """
   `eq` is the basic goal constructor: it succeeds if its arguments unify, fails
@@ -182,25 +188,30 @@ defmodule MiniKanren.Core do
   end
     
   # Internal wiring
+  @spec var(non_neg_integer) :: logic_variable
   @doc """
   Creates a new logic variable. Logic variables are represented as 1-tuples.
   """
   def var(c),  do: {c}
   
+  @spec var?(any) :: boolean
   @doc """
   Checks if the given argument is a logic variable.
   """
   def var?({_}), do: true
   def var?(_),   do: false
   
+  @spec unit(package) :: package
   @doc """
   """
   def unit(pkg), do: pkg
   
+  @spec mzero() :: :mzero
   @doc """
   """
   def mzero, do: :mzero
   
+  @spec mplus(goal_stream, (() -> goal_stream)) :: goal_stream
   @doc """
   """
   def mplus(:mzero, s), do: s
@@ -211,7 +222,8 @@ defmodule MiniKanren.Core do
   def mplus([h | t], s) do
     [h | fn -> mplus(s.(), t) end]
   end
-
+  
+  @spec bind(goal_stream, goal) :: goal_stream
   @doc """
   """
   def bind(:mzero, _), do: mzero
@@ -343,7 +355,8 @@ defmodule MiniKanren.Core do
   # Interface helpers
   def empty_state, do: {Map.new, 0}
   def call_empty_state(g), do: g.(empty_state)
-
+  
+  @spec take_all(goal_stream) :: list(package)
   def take_all(s) do
     case s do
       :mzero  -> []
@@ -353,6 +366,7 @@ defmodule MiniKanren.Core do
     end
   end
   
+  @spec take(non_neg_integer, goal_stream) :: list(package)
   def take(0, _), do: []
   def take(n, s) do
     case s do

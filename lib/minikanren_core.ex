@@ -77,8 +77,8 @@ defmodule MiniKanren.Core do
       [{"First clause", 1, 2}, {"Third clause", 3, 3}]
   """
   defmacro conde([do: {:__block__, _, cases}]) do
-    seqs = Enum.map(cases, fn seq -> quote do: MK.conj_many(unquote(seq)) end)
-    quote do: MK.disj_many(unquote(seqs))
+    seqs = Enum.map(cases, fn seq -> quote do: MK.bind_many([c, unquote_splicing(seq)]) end)
+    quote do: fn c -> MK.mplus_many(unquote(seqs)) end
   end
   defmacro conde([do: single_case]) do
     call = {:__block__, [], [single_case]}
@@ -123,7 +123,7 @@ defmodule MiniKanren.Core do
       {:__block__, _, goals} -> goals
       goal -> [goal]
     end
-    quote do: MK.conj_many(unquote(seq))
+    quote do: fn pkg -> MK.bind_many([pkg, unquote_splicing(seq)]) end
   end
   defmacro fresh([var | t], [do: do_block]) do
     quote do
@@ -195,30 +195,32 @@ defmodule MiniKanren.Core do
   
   @doc """
   """
-  def unit(s_c), do: [s_c]
+  def unit(pkg), do: pkg
   
   @doc """
   """
-  def mzero, do: []
+  def mzero, do: :mzero
   
   @doc """
   """
-  def mplus([], s), do: s
+  def mplus(:mzero, s), do: s
   def mplus(s1, s2) when is_function(s1) do
-    fn -> mplus(s2, s1.()) end
+    fn -> mplus(s1.(), s2) end
   end
-  def mplus([h | t], s2) do
-    [h | mplus(s2, t)]
+  def mplus(s1, s2) when is_tuple(s1), do: [s1 | s2]
+  def mplus([h | t], s) do
+    [h | fn -> mplus(s.(), t) end]
   end
-  
+
   @doc """
   """
-  def bind([], _), do: mzero
-  def bind(s, g) when is_function(s) do
-    fn -> bind(s.(), g) end
+  def bind(:mzero, _), do: mzero
+  def bind(thunk, goal) when is_function(thunk) do
+    fn -> bind(thunk.(), goal) end
   end
-  def bind([h | t], g) do
-    mplus(g.(h), bind(t, g))
+  def bind(pkg, goal) when is_tuple(pkg), do: goal.(pkg)
+  def bind([pkg | thunk], goal) do
+    mplus(goal.(pkg), fn -> bind(thunk.(), goal) end)
   end
   
   @doc """
@@ -320,62 +322,43 @@ defmodule MiniKanren.Core do
       f.(var(counter)).({s, (counter + 1)})
     end
   end
-  
-  @doc """
-  """
-  def disj(g1, g2) do
-    fn s_c -> mplus(g1.(s_c), g2.(s_c)) end
+    
+  defmacro mplus_many([fun | []]) do
+    quote do: unquote(fun)
+  end
+  defmacro mplus_many([fun | t]) do
+    quote do: MK.mplus(unquote(fun), fn -> MK.mplus_many(unquote(t)) end)
   end
   
-  @doc """
-  """
-  def conj(g1, g2) do
-    fn s_c -> bind(g1.(s_c), g2) end
+  defmacro bind_many([fun | []]) do
+    quote do: unquote(fun)
+  end
+  defmacro bind_many([fun1, fun2]) do
+    quote do: MK.bind(unquote(fun1), unquote(fun2))
+  end
+  defmacro bind_many([fun1, fun2 | t]) do
+    quote do: MK.bind_many([MK.bind(unquote(fun1), unquote(fun2)), unquote_splicing(t)])
   end
   
-  @doc """
-  Applies an inverse-η-delay to the given function call.
-  """
-  defmacro snooze(func) do
-    quote do
-      fn s_c ->
-        fn -> unquote(func).(s_c) end
-      end
-    end
-  end
-  
-  defmacro conj_many([fun | []]) do
-    quote do: MK.snooze(unquote(fun))
-  end
-  defmacro conj_many([fun | t]) do
-    quote do: MK.conj(MK.snooze(unquote(fun)), MK.conj_many(unquote(t)))
-  end
-  
-  defmacro disj_many([fun | []]) do
-    quote do: MK.snooze(unquote(fun))
-  end
-  defmacro disj_many([fun | t]) do
-    quote do: MK.disj(MK.snooze(unquote(fun)), MK.disj_many(unquote(t)))
-  end
-
   # Interface helpers
   def empty_state, do: {Map.new, 0}
   def call_empty_state(g), do: g.(empty_state)
-  
-  def pull(s) when is_function(s), do: pull(s.())
-  def pull(s), do: s
-  
+
   def take_all(s) do
-    case pull(s) do
-      [] -> []
+    case s do
+      :mzero  -> []
+      pkg when is_tuple(pkg)  -> [pkg]
+      f   when is_function(f) -> f.() |> take_all
       [h | t] -> [h | take_all(t)]
     end
   end
   
   def take(0, _), do: []
   def take(n, s) do
-    case pull(s) do
-      [] -> []
+    case s do
+      :mzero  -> []
+      pkg when is_tuple(pkg)  -> [pkg]
+      f   when is_function(f) -> take(n, f.())
       [h | t] -> [h | take(n - 1, t)]
     end
   end
@@ -408,7 +391,6 @@ defmodule MiniKanren.Core do
   
   def reify_name(n), do: :"_#{n}"
 end
-
 
 defmodule MiniKanren.Core.Functions do
   @moduledoc """
@@ -556,8 +538,8 @@ defmodule MiniKanren.Core.Functions do
       ...>   membero(x, [1, 2, 3])
       ...>   membero(y, [4, 5, 6])
       ...>   eq(out, {x, y})
-      ...> end
-      [{1, 4}, {1, 5}, {2, 4}, {1, 6}, {3, 4}, {2, 5}, {3, 5}, {2, 6}, {3, 6}]
+      ...> end |> Enum.sort
+      [{1, 4}, {1, 5}, {1, 6}, {2, 4}, {2, 5}, {2, 6}, {3, 4}, {3, 5}, {3, 6}]
       
       iex> use(MiniKanren, :core)
       iex> run(3, [x]) do

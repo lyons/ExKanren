@@ -38,7 +38,7 @@ defmodule MiniKanren.Impure do
   defmacro conda([do: {:__block__, _, clauses}]) do
     seqs = Enum.map(clauses, fn
       [h | []] -> quote do: {unquote(h), &MK.unit/1}
-      [h | t]  -> quote do: {unquote(h), MK.conj_many(unquote(t))}
+      [h | t]  -> quote do: {unquote(h), MK.bind_many(unquote(t))}
     end)
 
     quote do: fn s_c -> Impure._conda(unquote(seqs), s_c) end
@@ -69,7 +69,7 @@ defmodule MiniKanren.Impure do
   defmacro condu([do: {:__block__, _, clauses}]) do
     seqs = Enum.map(clauses, fn
       [h | []] -> quote do: {unquote(h), &MK.unit/1}
-      [h | t]  -> quote do: {unquote(h), MK.conj_many(unquote(t))}
+      [h | t]  -> quote do: {unquote(h), MK.bind_many(unquote(t))}
     end)
 
     quote do: fn s_c -> Impure._condu(unquote(seqs), s_c) end
@@ -124,16 +124,18 @@ defmodule MiniKanren.Impure do
   # Wiring
   def _conda([], _), do: []
   def _conda([{h, seq} | t], s_c) do
-    case pull(h.(s_c)) do
-      [] -> _conda(t, s_c)
-      a  -> bind(a, seq)
+    case h.(s_c) do
+    #case pull(h.(s_c)) do
+      :mzero -> _conda(t, s_c)
+      a      -> bind(a, seq)
     end
   end
   
   def _condu([], _), do: []
   def _condu([{h, seq} | t], s_c) do
-    case pull(h.(s_c)) do
-      []       -> _condu(t, s_c)
+    case h.(s_c) do
+    #case pull(h.(s_c)) do
+      :mzero   -> _condu(t, s_c)
       [a | _f] -> bind(unit(a), seq)
       a        -> bind(a, seq)
     end

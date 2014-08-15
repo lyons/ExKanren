@@ -1,6 +1,6 @@
 defmodule MKImpureTest do
   use ExUnit.Case
-  use(MiniKanren, :impure)
+  use MiniKanren
   
   test "conda ignores clauses after first success" do
     result = run_all([x]) do

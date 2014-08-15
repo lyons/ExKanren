@@ -3,8 +3,6 @@ defmodule DocTest do
   
   doctest MicroKanren
   
-  doctest MiniKanren.Core
-  doctest MiniKanren.Core.Functions
-  doctest MiniKanren.Impure
-  doctest MiniKanren.Impure.Functions
+  doctest MiniKanren
+  doctest MiniKanren.Functions
 end

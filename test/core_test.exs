@@ -1,9 +1,9 @@
 defmodule MKCoreTest do
   use ExUnit.Case
   
-  require MiniKanren.Core
-  import  MiniKanren.Core
-  import  MiniKanren.Core.Functions
+  require MiniKanren
+  import  MiniKanren
+  import  MiniKanren.Functions
   
   defp empty_substitution, do: Map.new
     

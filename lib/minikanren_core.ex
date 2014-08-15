@@ -124,19 +124,9 @@ defmodule MiniKanren.Core do
       ...> end
       [{["One", :two], ["Three", :four]}]
   """
-  defmacro fresh([], [do: do_block]) do
-    seq = case do_block do
-      {:__block__, _, goals} -> goals
-      goal -> [goal]
-    end
-    quote do: fn pkg -> MK.bind_many([pkg, unquote_splicing(seq)]) end
-  end
-  defmacro fresh([var | t], [do: do_block]) do
-    quote do
-      MK.call_fresh(fn (unquote var) ->
-        fresh(unquote(t), [do: unquote(do_block)])
-      end)
-    end
+  defmacro fresh(vars, [do: do_block]) when is_list(vars) do
+    func = MK.expand_fresh(vars, do_block)
+    quote do: unquote(func)
   end
   
   # miniKanren interface
@@ -193,6 +183,8 @@ defmodule MiniKanren.Core do
   Creates a new logic variable. Logic variables are represented as 1-tuples.
   """
   def var(c),  do: {c}
+  
+  def vars(c, n), do: Enum.map(c..(c + n - 1), &var/1)
   
   @spec var?(any) :: boolean
   @doc """
@@ -329,9 +321,31 @@ defmodule MiniKanren.Core do
   # Goal constructor helpers
   @doc """
   """
-  def call_fresh(f) do
-    fn {s, counter} ->
-      f.(var(counter)).({s, (counter + 1)})
+  def expand_fresh(ls = [_ | _], do_block) do
+    length = Enum.count(ls)
+    seq = case do_block do
+      {:__block__, _, goals} -> goals
+      goal -> [goal]
+    end
+    
+    quote do
+      fn {subs, counter} ->
+        fn unquote(ls) ->
+          MK.bind_many([{subs, counter + unquote(length)}, unquote_splicing(seq)])
+        end.(MK.vars(counter, unquote(length)))
+      end
+    end
+  end
+  def expand_fresh(ls = [], do_block) do
+    seq = case do_block do
+      {:__block__, _, goals} -> goals
+      goal -> [goal]
+    end
+    
+    quote do
+      fn pkg ->
+        MK.bind_many([pkg, unquote_splicing(seq)])
+      end
     end
   end
     

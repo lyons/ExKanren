@@ -24,11 +24,11 @@ defmodule MiniKanren do
   end
   
   # Typespecs
-  @type package :: {map(), non_neg_integer}
+  @type package :: {substitution, non_neg_integer}
   @type goal_stream :: :mzero | package | (() -> goal_stream) | nonempty_improper_list(package, (() -> goal_stream))
   @type goal :: (package -> goal_stream)
   @type logic_variable :: {non_neg_integer}
-  @type substitution :: Map.t
+  @type substitution :: map()
   @type logic_value :: any # Should be all types allowed in substitution
   
   # miniKanren operators
@@ -60,10 +60,10 @@ defmodule MiniKanren do
       []
   """
   def eq(u, v) do
-    fn {subs, counter} ->
+    fn {subs, cons, doms, counter} ->
       case unify(u, v, subs) do
         nil -> mzero
-        s   -> unit({s, counter})
+        s   -> unit({s, cons, doms, counter})
       end
     end
   end
@@ -282,7 +282,7 @@ defmodule MiniKanren do
     end)
     
     quote do
-      fn pkg = {subs, _} ->
+      fn pkg = {subs, _, _, _} ->
         unquote_splicing(bindings)
         MK.fresh([], [do: unquote(do_block)]).(pkg)
       end
@@ -387,11 +387,11 @@ defmodule MiniKanren do
   Extends the substitution `s` by relating the logic variable `x` with `v`,
   unless doing so creates a circular relation.
   """
-  def extend_substitution(x, v, s) do
-    if occurs_check(x, v, s) do
+  def extend_substitution(x, v, subs) do
+    if occurs_check(x, v, subs) do
       nil
     else
-      Dict.put(s, x, v)
+      Dict.put(subs, x, v)
     end
   end
   
@@ -469,9 +469,9 @@ defmodule MiniKanren do
     end
     
     quote do
-      fn {subs, counter} ->
+      fn {subs, cons, doms, counter} ->
         fn unquote(ls) ->
-          MK.bind_many([{subs, counter + unquote(length)}, unquote_splicing(seq)])
+          MK.bind_many([{subs, cons, doms, counter + unquote(length)}, unquote_splicing(seq)])
         end.(MK.vars(counter, unquote(length)))
       end
     end
@@ -508,7 +508,7 @@ defmodule MiniKanren do
   
   # Interface helpers
   @spec empty_package() :: package
-  def empty_package, do: {Map.new, 0}
+  def empty_package, do: {Map.new, nil, nil, 0}
   
   @spec call_empty_package(goal) :: goal_stream
   def call_empty_package(g), do: g.(empty_package)
@@ -538,8 +538,8 @@ defmodule MiniKanren do
     Enum.map(l_states, &reify_state/1)
   end
   
-  def reify_state({s, _}) do
-    v = walk_all(var(0), s)
+  def reify_state({subs, _, _, _}) do
+    v = walk_all(var(0), subs)
     walk_all(v, reify_s(v, Map.new))
   end
   
@@ -901,7 +901,7 @@ defmodule MiniKanren.Functions do
       []
   """
   def fresho(v) do
-    fn pkg = {subs, _} ->
+    fn pkg = {subs, _, _, _} ->
       case MK.var?(MK.walk(v, subs)) do
         false -> MK.mzero
         _     -> MK.unit(pkg)
@@ -929,7 +929,7 @@ defmodule MiniKanren.Functions do
       []
   """
   def staleo(v) do
-    fn pkg = {subs, _} ->
+    fn pkg = {subs, _, _, _} ->
       case MK.var?(MK.walk(v, subs)) do
         false -> MK.unit(pkg)
         _     -> MK.mzero

@@ -28,6 +28,8 @@ defmodule MiniKanren do
   @type goal_stream :: :mzero | package | (() -> goal_stream) | nonempty_improper_list(package, (() -> goal_stream))
   @type goal :: (package -> goal_stream)
   @type logic_variable :: {non_neg_integer}
+  @type substitution :: Map.t
+  @type logic_value :: any # Should be all types allowed in substitution
   
   # miniKanren operators
   @doc """
@@ -93,8 +95,8 @@ defmodule MiniKanren do
       [{"First clause", 1, 2}, {"Third clause", 3, 3}]
   """
   defmacro conde([do: {:__block__, _, cases}]) do
-    seqs = Enum.map(cases, fn seq -> quote do: MK.bind_many([c, unquote_splicing(seq)]) end)
-    quote do: fn c -> MK.mplus_many(unquote(seqs)) end
+    seqs = Enum.map(cases, fn seq -> quote do: MK.bind_many([pkg, unquote_splicing(seq)]) end)
+    quote do: fn pkg -> MK.mplus_many(unquote(seqs)) end
   end
   defmacro conde([do: single_case]) do
     call = {:__block__, [], [single_case]}
@@ -155,7 +157,7 @@ defmodule MiniKanren do
   defmacro run(n, vars, [do: do_block]) do
     quote do
       s = fresh(unquote(vars), [do: unquote(do_block)])
-      |> MK.call_empty_state
+      |> MK.call_empty_package
       MK.take(unquote(n), s)
       |> MK.reify
     end
@@ -181,7 +183,7 @@ defmodule MiniKanren do
   defmacro run_all(vars, [do: do_block]) do
     quote do
       fresh(unquote(vars), [do: unquote(do_block)])
-      |> MK.call_empty_state
+      |> MK.call_empty_package
       |> MK.take_all
       |> MK.reify
     end
@@ -211,7 +213,7 @@ defmodule MiniKanren do
       [h | t]  -> quote do: {unquote(h), MK.bind_many(unquote(t))}
     end)
 
-    quote do: fn s_c -> MK._conda(unquote(seqs), s_c) end
+    quote do: fn pkg -> MK._conda(unquote(seqs), pkg) end
   end
   defmacro conda([do: single_clause]) do
     call = {:__block__, [], [single_clause]}
@@ -240,7 +242,7 @@ defmodule MiniKanren do
       [h | t]  -> quote do: {unquote(h), MK.bind_many(unquote(t))}
     end)
 
-    quote do: fn s_c -> MK._condu(unquote(seqs), s_c) end
+    quote do: fn pkg -> MK._condu(unquote(seqs), pkg) end
   end
   defmacro condu([do: single_clause]) do
     call = {:__block__, [], [single_clause]}
@@ -280,40 +282,41 @@ defmodule MiniKanren do
     end)
     
     quote do
-      fn s_c = {subs, _} ->
+      fn pkg = {subs, _} ->
         unquote_splicing(bindings)
-        MK.fresh([], [do: unquote(do_block)]).(s_c)
+        MK.fresh([], [do: unquote(do_block)]).(pkg)
       end
     end
   end
   
   # Wiring
+  @spec _conda(list({goal, goal}), package) :: goal_stream
   def _conda([], _), do: []
-  def _conda([{h, seq} | t], s_c) do
-    case h.(s_c) do
-    #case pull(h.(s_c)) do
-      :mzero -> _conda(t, s_c)
+  def _conda([{h, seq} | t], pkg) do
+    case h.(pkg) do
+      :mzero -> _conda(t, pkg)
       a      -> bind(a, seq)
     end
   end
   
+  @spec _condu(list({goal, goal}), package) :: goal_stream
   def _condu([], _), do: []
-  def _condu([{h, seq} | t], s_c) do
-    case h.(s_c) do
-    #case pull(h.(s_c)) do
-      :mzero   -> _condu(t, s_c)
+  def _condu([{h, seq} | t], pkg) do
+    case h.(pkg) do
+      :mzero   -> _condu(t, pkg)
       [a | _f] -> bind(unit(a), seq)
       a        -> bind(a, seq)
     end
   end
   
   # Internal wiring
-  @spec var(non_neg_integer) :: logic_variable
+  @spec var(non_neg_integer | reference) :: logic_variable
   @doc """
   Creates a new logic variable. Logic variables are represented as 1-tuples.
   """
   def var(c),  do: {c}
   
+  @spec vars(non_neg_integer, pos_integer) :: nonempty_list(logic_variable)
   def vars(c, n), do: Enum.map(c..(c + n - 1), &var/1)
   
   @spec var?(any) :: boolean
@@ -357,31 +360,34 @@ defmodule MiniKanren do
     mplus(goal.(pkg), fn -> bind(thunk.(), goal) end)
   end
   
+  @spec walk(logic_value, substitution) :: logic_value
   @doc """
   """
-  def walk(u, s) do
-    case var?(u) and Dict.get(s, u, false) do
-      false -> u
-      val   -> walk(val, s)
+  def walk(x, subs) do
+    case var?(x) and Dict.get(subs, x, false) do
+      false -> x
+      val   -> walk(val, subs)
     end
   end
   
+  @spec walk_all(logic_value, substitution) :: logic_value
   @doc """
   """
-  def walk_all(v, s) do
-    case walk(v, s) do
-      [h | t]   -> [walk_all(h, s) | walk_all(t, s)]
-      {a, b}    -> {walk_all(a, s), walk_all(b, s)}
-      {a, b, c} -> {walk_all(a, s), walk_all(b, s), walk_all(c, s)}
+  def walk_all(v, subs) do
+    case walk(v, subs) do
+      [h | t]   -> [walk_all(h, subs) | walk_all(t, subs)]
+      {a, b}    -> {walk_all(a, subs), walk_all(b, subs)}
+      {a, b, c} -> {walk_all(a, subs), walk_all(b, subs), walk_all(c, subs)}
       val       -> val
     end
   end
   
+  @spec extend_substitution(logic_value, logic_value, substitution) :: substitution | nil
   @doc """
   Extends the substitution `s` by relating the logic variable `x` with `v`,
   unless doing so creates a circular relation.
   """
-  def ext_s(x, v, s) do
+  def extend_substitution(x, v, s) do
     if occurs_check(x, v, s) do
       nil
     else
@@ -389,16 +395,18 @@ defmodule MiniKanren do
     end
   end
   
+  @spec occurs_check(logic_value, logic_value, substitution) :: boolean
   @doc """
   Ensures relating `x` and `v` will not introduce a circular relation to the
   substitution `s`.
   """
-  def occurs_check(x, v, s) do
-    v = walk(v, s)
-    var_v = var?(v)
-    occurs_check(x, v, var_v, s)
+  def occurs_check(x, v, subs) do
+    v = walk(v, subs)
+    var_v? = var?(v)
+    occurs_check(x, v, var_v?, subs)
   end
   
+  @spec occurs_check(logic_value, logic_value, boolean, substitution) :: boolean
   defp occurs_check(v, v, true, _), do: true
   defp occurs_check(_, _, true, _), do: false
   defp occurs_check(x, [h | t], _, s) do
@@ -412,33 +420,35 @@ defmodule MiniKanren do
   end
   defp occurs_check(_, _, _, _), do: false
   
+  @spec unify(logic_value, logic_value, substitution) :: substitution | nil
   @doc """
   """
-  def unify(t1, t2, s) do
-    t1 = walk(t1, s)
-    t2 = walk(t2, s)
-    var_t1 = var?(t1)
-    var_t2 = var?(t2)
-    unify(t1, var_t1, t2, var_t2, s)
+  def unify(t1, t2, subs) do
+    t1 = walk(t1, subs)
+    t2 = walk(t2, subs)
+    var_t1? = var?(t1)
+    var_t2? = var?(t2)
+    unify(t1, var_t1?, t2, var_t2?, subs)
   end
   
-  defp unify(t, _, t, _, s), do: s
-  defp unify(t1, true, t2, _, s), do: ext_s(t1, t2, s)
-  defp unify(t1, _, t2, true, s), do: ext_s(t2, t1, s)
-  defp unify([h1 | t1], _, [h2 | t2], _, s) do
-    case unify(h1, h2, s) do
+  @spec unify(logic_value, boolean, logic_value, boolean, substitution) :: substitution | nil
+  defp unify(t, _, t, _, subs), do: subs
+  defp unify(t1, true, t2, _, subs), do: extend_substitution(t1, t2, subs)
+  defp unify(t1, _, t2, true, subs), do: extend_substitution(t2, t1, subs)
+  defp unify([h1 | t1], _, [h2 | t2], _, subs) do
+    case unify(h1, h2, subs) do
       nil -> nil
       x   -> unify(t1, t2, x)
     end
   end
-  defp unify({a1, b1}, _, {a2, b2}, _, s) do
-    case unify(a1, a2, s) do
+  defp unify({a1, b1}, _, {a2, b2}, _, subs) do
+    case unify(a1, a2, subs) do
       nil -> nil
       x   -> unify(b1, b2, x)
     end
   end
-  defp unify({a1, b1, c1}, _, {a2, b2, c2}, _, s) do
-    case unify(a1, a2, s) do
+  defp unify({a1, b1, c1}, _, {a2, b2, c2}, _, subs) do
+    case unify(a1, a2, subs) do
       nil -> nil
       x   -> case unify(b1, b2, x) do
                nil -> nil
@@ -497,8 +507,11 @@ defmodule MiniKanren do
   end
   
   # Interface helpers
-  def empty_state, do: {Map.new, 0}
-  def call_empty_state(g), do: g.(empty_state)
+  @spec empty_package() :: package
+  def empty_package, do: {Map.new, 0}
+  
+  @spec call_empty_package(goal) :: goal_stream
+  def call_empty_package(g), do: g.(empty_package)
   
   @spec take_all(goal_stream) :: list(package)
   def take_all(s) do
@@ -551,9 +564,9 @@ defmodule MiniKanren do
 end
 
 defmodule MiniKanren.Functions do
-  @moduledoc """
-  Some common relations used in miniKanren.
-  """
+  #@moduledoc """
+  #Some common relations used in miniKanren.
+  #"""
   
   use   MiniKanren, :no_functions
   alias MiniKanren, as: MK
@@ -570,7 +583,7 @@ defmodule MiniKanren.Functions do
       ...> end
       [1]
   """
-  def succeed, do: fn s_c -> MK.unit(s_c) end
+  def succeed, do: fn pkg -> MK.unit(pkg) end
   
   @doc """
   `succeed` is a goal that ignores its argument and always succeeds.
@@ -584,7 +597,7 @@ defmodule MiniKanren.Functions do
       ...> end
       [1]
   """
-  def succeed(_), do: fn s_c -> MK.unit(s_c) end
+  def succeed(_), do: fn pkg -> MK.unit(pkg) end
   
   @doc """
   `fail` is a goal that always fails.
@@ -837,15 +850,15 @@ defmodule MiniKanren.Functions do
   """
   def copy_term(u, v) do
     project([u]) do
-      eq(MK.walk_all(u, build_s(u, Map.new)), v)
+      eq(MK.walk_all(u, build_subs(u, Map.new)), v)
     end
   end
   
-  defp build_s(u, s) do
+  defp build_subs(u, subs) do
     case MK.var?(u) or u do
-      true    -> Dict.put_new(s, u, MK.var(make_ref))
-      [h | t] -> build_s(t, build_s(h, s))
-      _       -> s
+      true    -> Dict.put_new(subs, u, MK.var(make_ref))
+      [h | t] -> build_subs(t, build_subs(h, subs))
+      _       -> subs
     end
   end
   
@@ -888,10 +901,10 @@ defmodule MiniKanren.Functions do
       []
   """
   def fresho(v) do
-    fn s_c = {subs, _} ->
+    fn pkg = {subs, _} ->
       case MK.var?(MK.walk(v, subs)) do
         false -> MK.mzero
-        _     -> MK.unit(s_c)
+        _     -> MK.unit(pkg)
       end
     end
   end
@@ -916,9 +929,9 @@ defmodule MiniKanren.Functions do
       []
   """
   def staleo(v) do
-    fn s_c = {subs, _} ->
+    fn pkg = {subs, _} ->
       case MK.var?(MK.walk(v, subs)) do
-        false -> MK.unit(s_c)
+        false -> MK.unit(pkg)
         _     -> MK.mzero
       end
     end

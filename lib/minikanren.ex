@@ -24,11 +24,11 @@ defmodule MiniKanren do
   end
   
   # Typespecs
-  @type package :: {substitution, non_neg_integer}
+  @type package :: {substitution, map, map, non_neg_integer}
   @type goal_stream :: :mzero | package | (() -> goal_stream) | nonempty_improper_list(package, (() -> goal_stream))
   @type goal :: (package -> goal_stream)
   @type logic_variable :: {non_neg_integer}
-  @type substitution :: map()
+  @type substitution :: map | list({logic_value, logic_value})
   @type logic_value :: any # Should be all types allowed in substitution
   
   # miniKanren operators
@@ -363,8 +363,14 @@ defmodule MiniKanren do
   @spec walk(logic_value, substitution) :: logic_value
   @doc """
   """
-  def walk(x, subs) do
+  def walk(x, subs) when is_map(subs) do
     case var?(x) and Dict.get(subs, x, false) do
+      false -> x
+      val   -> walk(val, subs)
+    end
+  end
+  def walk(x, subs) when is_list(subs) do
+    case var?(x) and Association.get(subs, x) do
       false -> x
       val   -> walk(val, subs)
     end
@@ -387,11 +393,18 @@ defmodule MiniKanren do
   Extends the substitution `s` by relating the logic variable `x` with `v`,
   unless doing so creates a circular relation.
   """
-  def extend_substitution(x, v, subs) do
+  def extend_substitution(x, v, subs) when is_map(subs) do
     if occurs_check(x, v, subs) do
       nil
     else
       Dict.put(subs, x, v)
+    end
+  end
+  def extend_substitution(x, v, subs) when is_list(subs) do
+    if occurs_check(x, v, subs) do
+      nil
+    else
+      Association.put(subs, x, v)
     end
   end
   
@@ -936,4 +949,12 @@ defmodule MiniKanren.Functions do
       end
     end
   end
+end
+
+defmodule Association do
+  def get([], _), do: false
+  def get([{k, v} | _], k), do: v
+  def get([_ | t], k), do: get(t, k)
+  
+  def put(ls, k, v), do: [{k, v} | ls]
 end

@@ -29,6 +29,7 @@ defmodule MiniKanren do
   @type goal :: (package -> goal_stream)
   @type logic_variable :: {non_neg_integer}
   @type substitution :: map | list({logic_value, logic_value})
+  @type substitution_and_log :: {substitution, list({logic_value, logic_value})}
   @type logic_value :: any # Should be all types allowed in substitution
   
   # miniKanren operators
@@ -60,10 +61,11 @@ defmodule MiniKanren do
       []
   """
   def eq(u, v) do
-    fn {subs, cons, doms, counter} ->
+    fn pkg = {subs, cons, doms, counter} ->
       case unify(u, v, subs) do
         nil -> mzero
-        s   -> unit({s, cons, doms, counter})
+        {^subs, []} -> unit(pkg)
+        {s, log}    -> process_log.(log, cons).({s, cons, doms, counter})
       end
     end
   end
@@ -388,23 +390,23 @@ defmodule MiniKanren do
     end
   end
   
-  @spec extend_substitution(logic_value, logic_value, substitution) :: substitution | nil
+  @spec extend_substitution(logic_value, logic_value, substitution_and_log) :: substitution_and_log | nil
   @doc """
   Extends the substitution `s` by relating the logic variable `x` with `v`,
   unless doing so creates a circular relation.
   """
-  def extend_substitution(x, v, subs) when is_map(subs) do
+  def extend_substitution(x, v, {subs, log}) when is_map(subs) do
     if occurs_check(x, v, subs) do
       nil
     else
-      Dict.put(subs, x, v)
+      {Dict.put(subs, x, v), [{x, v} | log]}
     end
   end
-  def extend_substitution(x, v, subs) when is_list(subs) do
+  def extend_substitution(x, v, {subs, log}) when is_list(subs) do
     if occurs_check(x, v, subs) do
       nil
     else
-      Association.put(subs, x, v)
+      {Association.put(subs, x, v), [{x, v} | log]}
     end
   end
   
@@ -433,18 +435,19 @@ defmodule MiniKanren do
   end
   defp occurs_check(_, _, _, _), do: false
   
-  @spec unify(logic_value, logic_value, substitution) :: substitution | nil
+  @spec unify(logic_value, logic_value, substitution | substitution_and_log) :: substitution_and_log | nil
   @doc """
   """
-  def unify(t1, t2, subs) do
+  def unify(t1, t2, s = {subs, _}) do
     t1 = walk(t1, subs)
     t2 = walk(t2, subs)
     var_t1? = var?(t1)
     var_t2? = var?(t2)
-    unify(t1, var_t1?, t2, var_t2?, subs)
+    unify(t1, var_t1?, t2, var_t2?, s)
   end
-  
-  @spec unify(logic_value, boolean, logic_value, boolean, substitution) :: substitution | nil
+  def unify(t1, t2, subs), do: unify(t1, t2, {subs, []})
+
+  @spec unify(logic_value, boolean, logic_value, boolean, substitution_and_log) :: substitution_and_log | nil
   defp unify(t, _, t, _, subs), do: subs
   defp unify(t1, true, t2, _, subs), do: extend_substitution(t1, t2, subs)
   defp unify(t1, _, t2, true, subs), do: extend_substitution(t2, t1, subs)
@@ -574,6 +577,21 @@ defmodule MiniKanren do
   defp reify_s(_, _, s), do: s
   
   def reify_name(n), do: :"_#{n}"
+  
+  # CLP stuff
+  def process_log do
+    Process.get(:process_log, &MiniKanren.process_log_stub/2)
+  end
+  def enforce_constraints do
+    Process.get(:enforce_constraints, &MiniKanren.enforce_constraints_stub/1)
+  end
+  def reify_constraints do
+    Process.get(:reify_constraints, &MiniKanren.reify_constraints_stub/2)
+  end
+  
+  def process_log_stub(_, _),       do: &MiniKanren.unit/1
+  def enforce_constraints_stub(_),  do: &MiniKanren.unit/1
+  def reify_constraints_stub(_, _), do: &MiniKanren.unit/1 
 end
 
 defmodule MiniKanren.Functions do
@@ -952,6 +970,8 @@ defmodule MiniKanren.Functions do
 end
 
 defmodule Association do
+  def new, do: []
+  
   def get([], _), do: false
   def get([{k, v} | _], k), do: v
   def get([_ | t], k), do: get(t, k)

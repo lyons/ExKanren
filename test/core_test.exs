@@ -6,6 +6,8 @@ defmodule MKCoreTest do
   import  MiniKanren.Functions
   
   defp empty_substitution, do: Map.new
+  defp just_subs({subs, _}), do: subs
+  defp just_subs(nil), do: nil
     
   test "vars are vars" do
     assert(var?(var(0)))
@@ -42,11 +44,13 @@ defmodule MKCoreTest do
   end
   
   test "unifying var with itself" do
-    assert(unify(var(0), var(0), empty_substitution) == empty_substitution)
+    assert(unify(var(0), var(0), empty_substitution) ==
+           {empty_substitution, []})
   end
   
   test "unifying two distinct vars" do
-    result = Enum.into [{var(0), var(1)}], Map.new
+    ls = [{var(0), var(1)}]
+    result = {Enum.into(ls, Map.new), ls}
     assert(unify(var(0), var(1), empty_substitution) == result)
     
     assert(unify(var(1), var(0), unify(var(0), var(1), empty_substitution)) ==
@@ -54,22 +58,31 @@ defmodule MKCoreTest do
   end
   
   test "unifying lists" do
-    result = Enum.into [{var(0), 2}, {var(1), 1}], Map.new
-    assert(unify([1, var(0)], [var(1), 2], empty_substitution) == result)
-    assert(unify([1, var(0)], [2, 3],      empty_substitution) == nil)
-    assert(unify([1, var(0)], [1, 2, 3],   empty_substitution) == nil)
+    result = Enum.into([{var(0), 2}, {var(1), 1}], Map.new)
+    assert(unify([1, var(0)], [var(1), 2], empty_substitution) |> just_subs == result)
+    assert(unify([1, var(0)], [2, 3],      empty_substitution) |> just_subs == nil)
+    assert(unify([1, var(0)], [1, 2, 3],   empty_substitution) |> just_subs == nil)
   end
   
   test "unifying 2-tuples" do
-    result = Enum.into [{var(0), 2}, {var(1), 1}], Map.new
-    assert(unify({1, var(0)}, {var(1), 2}, empty_substitution) == result)
-    assert(unify({1, var(0)}, {2, 2},      empty_substitution) == nil)
+    result = Enum.into([{var(0), 2}, {var(1), 1}], Map.new)
+    assert(unify({1, var(0)}, {var(1), 2}, empty_substitution) |> just_subs == result)
+    assert(unify({1, var(0)}, {2, 2},      empty_substitution) |> just_subs == nil)
   end
   
   test "unifying 3-tuples" do
-    result = Enum.into [{var(0), 2}, {var(1), 1}], Map.new
-    assert(unify({var(0), :foo, 1}, {2, :foo, var(1)}, empty_substitution) == result)
-    assert(unify({var(0), :foo, 1}, {2, :bar, var(1)}, empty_substitution) == nil)
+    result = Enum.into([{var(0), 2}, {var(1), 1}], Map.new)
+    assert(unify({var(0), :foo, 1}, {2, :foo, var(1)}, empty_substitution) |> just_subs == result)
+    assert(unify({var(0), :foo, 1}, {2, :bar, var(1)}, empty_substitution) |> just_subs == nil)
+  end
+  
+  test "unify returns log of new substitutions" do
+    {x_s, x_l} = unify(var(0), var(1), empty_substitution)
+    {y_s, y_l} = unify([var(2), var(3)], [:foo, var(1)], x_s)
+    
+    assert(x_l == [{var(0), var(1)}])
+    assert(Enum.sort(y_l) == Enum.sort([{var(2), :foo}, {var(3), var(1)}]))
+    assert(y_s == Enum.into([{var(2), :foo}, {var(3), var(1)}, {var(0), var(1)}], Map.new))
   end
 
   test "allow for single-case conde" do

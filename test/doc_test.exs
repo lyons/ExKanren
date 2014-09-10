@@ -5,4 +5,5 @@ defmodule DocTest do
   
   doctest MiniKanren
   doctest MiniKanren.Functions
+  doctest MiniKanren.CLP.Tree
 end

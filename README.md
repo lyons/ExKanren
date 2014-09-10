@@ -1,36 +1,31 @@
 ExKanren
 ========
 
-Relational programming in Elixir, providing implementations of both µKanren (as described in *[μKanren: A Minimal Functional Core
-for Relational Programming](http://webyrd.net/scheme-2013/papers/HemannMuKanren2013.pdf)*), and miniKanren (mostly as described in *[Relational Programming in miniKanren: Techniques, Applications, and Implementations](https://scholarworks.iu.edu/dspace/bitstream/handle/2022/8777/Byrd_indiana_0093A_10344.pdf)*).
+Relational programming in Elixir based on miniKanren.
+
+## What's new
+2014-09-2014: Working through the cKanren paper, CLP(Tree) is now implemented
 
 ## Usage
+`MiniKanren` defines the pure and impure operators of miniKanren, and `MiniKanren.Functions` implements some of the common relations. `use MiniKanren` will import both `MiniKanren` and `MiniKanren.Functions`.
 
-`MicroKanren` provides an implementation of µKanren that uses `HashDicts` instead of lists to store substitutions.
-
-`MicroKanren.Reference` is a direct translation of the implementation in *[μKanren: A Minimal Functional Core
-for Relational Programming](http://webyrd.net/scheme-2013/papers/HemannMuKanren2013.pdf)*, and is included for completeness.
-
-`MiniKanren.Core` defines the basic operators of core miniKanren, and `MiniKanren.Core.Functions` implements some of the common relations used in core miniKanren. `use(MiniKanren, :core)` will import both `Core` and `Core.Functions`.
-
-`MiniKanren.Impure` defines the impure operators `conda`, `condu`, and `project`. `MiniKanren.Impure.Functions` implements `onceo` and `copy_term`, as well as a few impure functions borrowed from  [core.logic](https://github.com/clojure/core.logic). `use(MiniKanren, :impure)` will import both core miniKanren and the impure extensions.
+`MiniKanren.CLP.Tree` provides the tree disequality operator `neq`, and the runtime hooks needed to use disequality constraints. `use MiniKanren.CLP.Tree` will import the operator and some common relations that rely on it, `use MiniKanren.CLP.Tree, :hooks` will set the process dictionary with the hooks needed to run CLP(Tree). 
 
 ```elixir
-use(MiniKanren, :core)
-run_all([out, x, y]) do
-  eq(out, {x, y})
-  membero(x, [:a, :b, :c])
-  conde do
-    [eq("Foo", y)]
-    [eq(x, :b), eq(y, "Bar")]
-  end
+use MiniKanren
+use MiniKanren.CLP.Tree
+use MiniKanren.CLP.Tree, :hooks
+run_all([out, x]) do
+  eq(x, [:good_night, :kittens, :good_night, :mittens, :good_night, :clocks, :good_night, :socks])
+  rembero(:good_night, x, out)
 end
-# [a: "Foo", b: "Foo", b: "Bar", c: "Foo"]
+# [:kittens, :mittens, :clocks, :socks]
 ```
 
-## Todo
+## References
+This code is based on reading and figuring out a bunch of papers &c:
 
-*   Document internal functions in miniKanren, docs and tests for µKanren
-*   Non-trivial examples
-*   Disequality constraints for miniKanren
-*   cKanren, αKanren
+* [cKanren: miniKanren with Constraints](http://scheme2011.ucombinator.org/papers/Alvis2011.pdf)
+* [μKanren: A Minimal Functional Core for Relational Programming](http://webyrd.net/scheme-2013/papers/HemannMuKanren2013.pdf)
+* Relational Programming in miniKanren: Techniques, Applications, and Implementations](https://scholarworks.iu.edu/dspace/bitstream/handle/2022/8777/Byrd_indiana_0093A_10344.pdf)
+* [core.logic](https://github.com/clojure/core.logic)

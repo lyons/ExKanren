@@ -27,5 +27,5 @@ This code is based on reading and figuring out a bunch of papers &c:
 
 * [cKanren: miniKanren with Constraints](http://scheme2011.ucombinator.org/papers/Alvis2011.pdf)
 * [μKanren: A Minimal Functional Core for Relational Programming](http://webyrd.net/scheme-2013/papers/HemannMuKanren2013.pdf)
-* Relational Programming in miniKanren: Techniques, Applications, and Implementations](https://scholarworks.iu.edu/dspace/bitstream/handle/2022/8777/Byrd_indiana_0093A_10344.pdf)
+* [Relational Programming in miniKanren: Techniques, Applications, and Implementations](https://scholarworks.iu.edu/dspace/bitstream/handle/2022/8777/Byrd_indiana_0093A_10344.pdf)
 * [core.logic](https://github.com/clojure/core.logic)

@@ -10,6 +10,11 @@ defmodule MiniKanren.CLP.Tree do
   alias  MiniKanren, as: MK
   import MiniKanren, except: [process_log: 2, enforce_constraints: 1, reify_constraints: 2]
 
+  defmacro __using__(:no_functions) do
+    quote do
+      import MiniKanren.CLP.Tree, only: [neq: 2]
+    end
+  end
   defmacro __using__(:hooks) do
     quote do
       Process.put(:process_log, &MiniKanren.CLP.Tree.process_log/2)
@@ -20,6 +25,7 @@ defmodule MiniKanren.CLP.Tree do
   defmacro __using__(_) do
     quote do
       import MiniKanren.CLP.Tree, only: [neq: 2]
+      import MiniKanren.CLP.Tree.Functions
     end
   end
 
@@ -62,6 +68,14 @@ defmodule MiniKanren.CLP.Tree do
     ...>   neq(out, 3)
     ...> end
     [2]
+
+    iex> use MiniKanren
+    iex> use MiniKanren.CLP.Tree
+    iex> use MiniKanren.CLP.Tree, :hooks
+    iex> run_all([out]) do
+    ...>   neq(out, 2)
+    ...> end
+    [[:_0, :- | {:neq, [[{:_0, 2}]]}]]
   """
   def neq(u, v) do
     fn pkg = {subs, _cons, _doms, _counter} ->
@@ -104,5 +118,135 @@ defmodule MiniKanren.CLP.Tree do
   def normalise_store_loop([], cons, {subs, _, doms, counter}, log) do
     cons = constraint(neq_c(log), :neq_c, log) |> extend_constraints(cons)
     {subs, cons, doms, counter}
+  end
+end
+
+defmodule MiniKanren.CLP.Tree.Functions do
+  use MiniKanren
+  use MiniKanren.CLP.Tree, :no_functions
+
+  @doc """
+  Ensures that all elements of `ls` are distinct.
+
+  ## Examples
+
+    iex> use MiniKanren
+    iex> use MiniKanren.CLP.Tree
+    iex> use MiniKanren.CLP.Tree, :hooks
+    iex> run_all([out, x, y, z]) do
+    ...>   distincto([x, y, z])
+    ...>   conde do
+    ...>     [eq(x, 1), eq(y, 2), eq(z, 3)]
+    ...>     [eq(x, 1), eq(y, 1), eq(z, 5)]
+    ...>   end
+    ...>   eq(out, [x, y, z])
+    ...> end
+    [[1, 2, 3]]
+  """
+  def distincto(ls) do
+    conde do
+      [eq(ls, [])]
+      [fresh([x]) do
+        eq(ls, [x])
+      end]
+      [fresh([fst, snd, tail]) do
+        eq(ls, [fst, snd | tail])
+        neq(fst, snd)
+        distincto([fst | tail])
+        distincto([snd | tail])
+      end]
+    end
+  end
+
+  @doc """
+  Removes all occurences of `x` from `ls`
+
+  ## Examples
+
+    iex> use MiniKanren
+    iex> use MiniKanren.CLP.Tree
+    iex> use MiniKanren.CLP.Tree, :hooks
+    iex> run_all([out, x]) do
+    ...>   eq(x, [1, 2, 1, 3, 4, 5, 1])
+    ...>   rembero(1, x, out)
+    ...> end
+    [[2, 3, 4, 5]]
+  """
+  def rembero(x, ls, out) do
+    conde do
+      [eq([], ls), eq([], out)]
+      [fresh([h, t, res]) do
+        eq([h | t], ls)
+        rembero(x, t, res)
+        conde do
+          [eq(h, x), eq(res, out)]
+          [neq(h, x), eq([h | res], out)]
+        end
+      end]
+    end
+  end
+
+  @doc """
+  Removes the first occurence of `x` from `ls`
+
+  ## Examples
+
+    iex> use MiniKanren
+    iex> use MiniKanren.CLP.Tree
+    iex> use MiniKanren.CLP.Tree, :hooks
+    iex> run_all([out, x]) do
+    ...>   eq(x, [1, 2, 1, 3, 4, 5, 1])
+    ...>   rember_firsto(1, x, out)
+    ...> end
+    [[2, 1, 3, 4, 5, 1]]
+  """
+  def rember_firsto(x, ls, out) do
+    conde do
+      [eq(ls, []), eq(out, [])]
+      [fresh([h, t]) do
+        eq([x | t], ls)
+        eq(t, out)
+      end]
+      [fresh([h, t, res]) do
+        eq([h | t], ls)
+        eq([h | res], out)
+        neq(x, h)
+        rember_firsto(x, t, res)
+      end]
+    end
+  end
+
+  @doc """
+  Relates `lhs` to all possible permutations of `rhs`. Returns curious results
+  if `rhs` contains any fresh variables.
+
+  ## Examples
+    iex> use MiniKanren
+    iex> use MiniKanren.CLP.Tree
+    iex> use MiniKanren.CLP.Tree, :hooks
+    iex> run_all([out, x, y, z]) do
+    ...>   permuteo([x, y, z], [2, 3, 1])
+    ...>   eq(out, [x, y, z])
+    ...> end |> Enum.sort
+    [[1, 2, 3], [1, 3, 2], [2, 1, 3], [2, 3, 1], [3, 1, 2], [3, 2, 1]]
+
+    iex> use MiniKanren
+    iex> use MiniKanren.CLP.Tree
+    iex> use MiniKanren.CLP.Tree, :hooks
+    iex> run_all([out, x, y, z]) do
+    ...>   permuteo([x, y, z], [2, 1, 1])
+    ...>   eq(out, [x, y, z])
+    ...> end |> Enum.sort
+    [[1, 1, 2], [1, 2, 1], [2, 1, 1]]
+  """
+  def permuteo(lhs, rhs) do
+    conde do
+      [eq(lhs, []), eq(rhs, [])]
+      [fresh([h, t, res]) do
+        eq([h | t], lhs)
+        rember_firsto(h, rhs, res)
+        permuteo(t, res)
+      end]
+    end
   end
 end

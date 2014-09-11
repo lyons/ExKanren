@@ -34,9 +34,10 @@ defmodule MiniKanren do
   @type substitution :: map_substitution | list_substitution
   @type unification_log :: list_substitution
   @type substitution_and_log :: {substitution, unification_log}
-  @type constraint :: {goal, atom, list_substitution}
+  @type constraint :: {goal, atom, list}
   @type constraint_store :: list(constraint)
-  @type domain_store :: any # Figure this out when implementing something that uses domains
+  @type domain :: list
+  @type domain_store :: list_substitution
   @type logic_value :: any # Should be all types allowed in substitution
 
   # miniKanren operators
@@ -422,22 +423,44 @@ defmodule MiniKanren do
       val       -> val
     end
   end
-
+  
   @spec extend_substitution(logic_variable,
                             logic_value,
-                            substitution_and_log) :: substitution_and_log | nil
+                            substitution) :: substitution_and_log | nil
   @doc """
   Extends the substitution `s` by relating the logic variable `x` with `v`,
   unless doing so creates a circular relation.
   """
-  def extend_substitution(x, v, {subs, log}) when is_map(subs) do
+  def extend_substitution(x, v, subs) when is_map(subs) do
+    if occurs_check(x, v, subs) do
+      nil
+    else
+      Dict.put(subs, x, v)
+    end
+  end
+  def extend_substitution_logged(x, v, {subs, log}) when is_list(subs) do
+    if occurs_check(x, v, subs) do
+      nil
+    else
+      Association.put(subs, x, v)
+    end
+  end
+
+  @spec extend_substitution_logged(logic_variable,
+                                   logic_value,
+                                   substitution_and_log) :: substitution_and_log | nil
+  @doc """
+  Extends the substitution `s` by relating the logic variable `x` with `v`,
+  unless doing so creates a circular relation.
+  """
+  def extend_substitution_logged(x, v, {subs, log}) when is_map(subs) do
     if occurs_check(x, v, subs) do
       nil
     else
       {Dict.put(subs, x, v), [{x, v} | log]}
     end
   end
-  def extend_substitution(x, v, {subs, log}) when is_list(subs) do
+  def extend_substitution_logged(x, v, {subs, log}) when is_list(subs) do
     if occurs_check(x, v, subs) do
       nil
     else
@@ -484,8 +507,8 @@ defmodule MiniKanren do
 
   @spec unify(logic_value, boolean, logic_value, boolean, substitution_and_log) :: substitution_and_log | nil
   defp unify(t, _, t, _, subs), do: subs
-  defp unify(t1, true, t2, _, subs), do: extend_substitution(t1, t2, subs)
-  defp unify(t1, _, t2, true, subs), do: extend_substitution(t2, t1, subs)
+  defp unify(t1, true, t2, _, subs), do: extend_substitution_logged(t1, t2, subs)
+  defp unify(t1, _, t2, true, subs), do: extend_substitution_logged(t2, t1, subs)
   defp unify([h1 | t1], _, [h2 | t2], _, subs) do
     case unify(h1, h2, subs) do
       nil -> nil
@@ -731,6 +754,9 @@ defmodule MiniKanren do
       false -> cons
     end
   end
+  
+  @spec extend_domains(logic_variable, domain, domain_store) :: domain_store
+  def extend_domains(x, d, doms), do: [{x, d} | doms]
 
   @spec subsumes?(unification_log, substitution) :: boolean
   def subsumes?(log, subs) do

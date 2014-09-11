@@ -105,8 +105,8 @@ defmodule MiniKanren do
       [{"First clause", 1, 2}, {"Third clause", 3, 3}]
   """
   defmacro conde([do: {:__block__, _, cases}]) do
-    seqs = Enum.map(cases, fn seq -> quote do: MK.bind_many([pkg, unquote_splicing(seq)]) end)
-    quote do: fn pkg -> MK.mplus_many(unquote(seqs)) end
+    seqs = Enum.map(cases, fn seq -> quote do: MK.bind_many!([pkg, unquote_splicing(seq)]) end)
+    quote do: fn pkg -> MK.mplus_many!(unquote(seqs)) end
   end
   defmacro conde([do: single_case]) do
     call = {:__block__, [], [single_case]}
@@ -222,7 +222,7 @@ defmodule MiniKanren do
   defmacro conda([do: {:__block__, _, clauses}]) do
     seqs = Enum.map(clauses, fn
       [h | []] -> quote do: {unquote(h), &MK.unit/1}
-      [h | t]  -> quote do: {unquote(h), MK.bind_many(unquote(t))}
+      [h | t]  -> quote do: {unquote(h), MK.bind_many!(unquote(t))}
     end)
 
     quote do: fn pkg -> MK._conda(unquote(seqs), pkg) end
@@ -251,7 +251,7 @@ defmodule MiniKanren do
   defmacro condu([do: {:__block__, _, clauses}]) do
     seqs = Enum.map(clauses, fn
       [h | []] -> quote do: {unquote(h), &MK.unit/1}
-      [h | t]  -> quote do: {unquote(h), MK.bind_many(unquote(t))}
+      [h | t]  -> quote do: {unquote(h), MK.bind_many!(unquote(t))}
     end)
 
     quote do: fn pkg -> MK._condu(unquote(seqs), pkg) end
@@ -523,7 +523,7 @@ defmodule MiniKanren do
     quote do
       fn {subs, cons, doms, counter} ->
         fn unquote(ls) ->
-          MK.bind_many([{subs, cons, doms, counter + unquote(length)}, unquote_splicing(seq)])
+          MK.bind_many!([{subs, cons, doms, counter + unquote(length)}, unquote_splicing(seq)])
         end.(MK.vars(counter, unquote(length)))
       end
     end
@@ -536,26 +536,33 @@ defmodule MiniKanren do
 
     quote do
       fn pkg ->
-        MK.bind_many([pkg, unquote_splicing(seq)])
+        MK.bind_many!([pkg, unquote_splicing(seq)])
       end
     end
   end
 
-  defmacro mplus_many([fun | []]) do
+  def mplus_many([f]), do: f
+  def mplus_many([f | t]),  do: mplus(f, fn -> mplus_many(t) end)
+
+  defmacro mplus_many!([fun | []]) do
     quote do: unquote(fun)
   end
-  defmacro mplus_many([fun | t]) do
-    quote do: MK.mplus(unquote(fun), fn -> MK.mplus_many(unquote(t)) end)
+  defmacro mplus_many!([fun | t]) do
+    quote do: MK.mplus(unquote(fun), fn -> MK.mplus_many!(unquote(t)) end)
   end
 
-  defmacro bind_many([fun | []]) do
+  def bind_many([f]), do: f
+  def bind_many([f1, f2]), do: bind(f1, f2)
+  def bind_many([f1, f2 | t]), do: bind_many([bind(f1, f2), t])
+
+  defmacro bind_many!([fun | []]) do
     quote do: unquote(fun)
   end
-  defmacro bind_many([fun1, fun2]) do
+  defmacro bind_many!([fun1, fun2]) do
     quote do: MK.bind(unquote(fun1), unquote(fun2))
   end
-  defmacro bind_many([fun1, fun2 | t]) do
-    quote do: MK.bind_many([MK.bind(unquote(fun1), unquote(fun2)), unquote_splicing(t)])
+  defmacro bind_many!([fun1, fun2 | t]) do
+    quote do: MK.bind_many!([MK.bind(unquote(fun1), unquote(fun2)), unquote_splicing(t)])
   end
 
   # Interface helpers

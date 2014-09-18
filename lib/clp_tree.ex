@@ -2,14 +2,14 @@ defmodule MiniKanren.CLP.Tree do
   @moduledoc """
   Provides the tree disequality operator `neq`, and hooks for using CLP(Tree)
   in miniKanren.
-
+  
   `use MiniKanren.CLP.Tree` to import the disequality operator.
   `use MiniKanren.CLP.Tree, :hooks` to set the hooks.
   """
-
+  
   alias  MiniKanren, as: MK
   import MiniKanren, except: [process_log: 2, enforce_constraints: 1, reify_constraints: 2]
-
+  
   defmacro __using__(:no_functions) do
     quote do
       import MiniKanren.CLP.Tree, only: [neq: 2]
@@ -28,16 +28,16 @@ defmodule MiniKanren.CLP.Tree do
       import MiniKanren.CLP.Tree.Functions
     end
   end
-
+  
   @spec process_log(MK.unification_log, MK.constraint_store) :: MK.goal
   def process_log(log, cons) do
     recover_vars(log)
     |> run_constraints(cons)
   end
-
+  
   @spec enforce_constraints(any) :: MK.goal
   def enforce_constraints(_), do: &MK.unit/1
-
+  
   @spec reify_constraints(MK.logic_value, MK.list_substitution) :: any
   def reify_constraints(result_term, reified_names) do
     fn _pkg = {_subs, cons, _doms, _counter} ->
@@ -52,13 +52,13 @@ defmodule MiniKanren.CLP.Tree do
       end
     end
   end
-
+  
   @spec neq(MK.logic_value, MK.logic_value) :: MK.goal
   @doc """
   `neq` ensures two logic terms will never unify.
-
+  
   ## Examples:
-
+  
     iex> use MiniKanren
     iex> use MiniKanren.CLP.Tree
     iex> use MiniKanren.CLP.Tree, :hooks
@@ -68,7 +68,7 @@ defmodule MiniKanren.CLP.Tree do
     ...>   neq(out, 3)
     ...> end
     [2]
-
+  
     iex> use MiniKanren
     iex> use MiniKanren.CLP.Tree
     iex> use MiniKanren.CLP.Tree, :hooks
@@ -85,7 +85,7 @@ defmodule MiniKanren.CLP.Tree do
       end
     end
   end
-
+  
   @spec neq_c(MK.unification_log) :: MK.goal
   def neq_c(log) do
     fn pkg = {subs, _cons, _doms, _counter} ->
@@ -96,12 +96,12 @@ defmodule MiniKanren.CLP.Tree do
       end
     end
   end
-
+  
   @spec normalise_store(MK.unification_log, MK.package) :: MK.package
   def normalise_store(log, pkg = {_, cons, _, _}) do
     normalise_store_loop(cons, [], pkg, log)
   end
-
+  
   def normalise_store_loop([c | t], cons, pkg, log) do
     case constraint_operator(c) == :neq_c do
       true  ->
@@ -120,16 +120,16 @@ defmodule MiniKanren.CLP.Tree do
     {subs, cons, doms, counter}
   end
 end
-
+  
 defmodule MiniKanren.CLP.Tree.Functions do
   use MiniKanren
   use MiniKanren.CLP.Tree, :no_functions
-
+  
   @doc """
   Ensures that all elements of `ls` are distinct.
-
+  
   ## Examples
-
+  
     iex> use MiniKanren
     iex> use MiniKanren.CLP.Tree
     iex> use MiniKanren.CLP.Tree, :hooks
@@ -157,12 +157,12 @@ defmodule MiniKanren.CLP.Tree.Functions do
       end]
     end
   end
-
+  
   @doc """
   Removes all occurences of `x` from `ls`
-
+  
   ## Examples
-
+  
     iex> use MiniKanren
     iex> use MiniKanren.CLP.Tree
     iex> use MiniKanren.CLP.Tree, :hooks
@@ -185,12 +185,12 @@ defmodule MiniKanren.CLP.Tree.Functions do
       end]
     end
   end
-
+  
   @doc """
   Removes the first occurence of `x` from `ls`
-
+  
   ## Examples
-
+  
     iex> use MiniKanren
     iex> use MiniKanren.CLP.Tree
     iex> use MiniKanren.CLP.Tree, :hooks
@@ -203,7 +203,7 @@ defmodule MiniKanren.CLP.Tree.Functions do
   def rember_firsto(x, ls, out) do
     conde do
       [eq(ls, []), eq(out, [])]
-      [fresh([h, t]) do
+      [fresh([_h, t]) do
         eq([x | t], ls)
         eq(t, out)
       end]
@@ -215,11 +215,11 @@ defmodule MiniKanren.CLP.Tree.Functions do
       end]
     end
   end
-
+  
   @doc """
   Relates `lhs` to all possible permutations of `rhs`. Returns curious results
   if `rhs` contains any fresh variables.
-
+  
   ## Examples
     iex> use MiniKanren
     iex> use MiniKanren.CLP.Tree
@@ -229,7 +229,7 @@ defmodule MiniKanren.CLP.Tree.Functions do
     ...>   eq(out, [x, y, z])
     ...> end |> Enum.sort
     [[1, 2, 3], [1, 3, 2], [2, 1, 3], [2, 3, 1], [3, 1, 2], [3, 2, 1]]
-
+  
     iex> use MiniKanren
     iex> use MiniKanren.CLP.Tree
     iex> use MiniKanren.CLP.Tree, :hooks

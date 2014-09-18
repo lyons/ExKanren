@@ -3,9 +3,9 @@ defmodule MiniKanren do
   Provides the pure operators `eq`, `conde`, `fresh`, the interface macros `run`
   and `run_all`, and the impure operators `conda`, `condu`, `project`.
   """
-
+  
   alias MiniKanren, as: MK
-
+  
   defmacro __using__(:no_functions) do
     # It is bad when MiniKanren.Functions tries to import itself
     quote do
@@ -22,7 +22,7 @@ defmodule MiniKanren do
       import  MiniKanren.Functions
     end
   end
-
+  
   # Typespecs
   @type package :: {map_substitution, constraint_store, domain_store, non_neg_integer}
   @type goal_stream :: :mzero | package | (() -> goal_stream) | nonempty_improper_list(package, (() -> goal_stream))
@@ -39,28 +39,28 @@ defmodule MiniKanren do
   @type domain :: list
   @type domain_store :: list_substitution
   @type logic_value :: any # Should be all types allowed in substitution
-
+  
   # miniKanren operators
   @spec eq(logic_value, logic_value) :: goal
   @doc """
   `eq` is the basic goal constructor: it succeeds if its arguments unify, fails
   otherwise.
-
+  
   ## Examples:
-
+  
       iex> use MiniKanren
       iex> run_all([q]) do
       ...>   eq(q, 1)
       ...> end
       [1]
-
+  
       iex> use MiniKanren
       iex> run_all([x, y]) do
       ...>   eq(x, [1, y])
       ...>   eq(y, 2)
       ...> end
       [[1, 2]]
-
+  
       iex> use MiniKanren
       iex> run_all([x, y]) do
       ...>   eq(x, 1)
@@ -78,13 +78,13 @@ defmodule MiniKanren do
       end
     end
   end
-
+  
   @doc """
   `conde` accepts two or more clauses made of lists of goals, and returns the
   logical disjunction of these clauses.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   conde do
@@ -94,7 +94,7 @@ defmodule MiniKanren do
       ...>   end
       ...> end
       [1, 2, 3]
-
+  
       iex> use MiniKanren
       iex> run_all([out, x, y]) do
       ...>   conde do
@@ -113,14 +113,14 @@ defmodule MiniKanren do
     call = {:__block__, [], [single_case]}
     quote do: MK.conde(do: unquote(call))
   end
-
+  
   @doc """
   `fresh` accepts a list of one or more logic variables, and a block containing
   one or more goals. The logic variables are bound into the lexical scope of the
   block, and the logical conjuction of the goals is performed.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([out]) do
       ...>   fresh([x, y]) do
@@ -130,7 +130,7 @@ defmodule MiniKanren do
       ...>   end
       ...> end
       [{"One", :two}]
-
+  
       iex> use MiniKanren
       iex> run_all([out, a, b]) do
       ...>   fresh([x, y]) do
@@ -151,13 +151,13 @@ defmodule MiniKanren do
     func = MK.expand_fresh(vars, do_block)
     quote do: unquote(func)
   end
-
+  
   # miniKanren interface
   @doc """
   `run` is similar to `run_all`, but returns at most `n` results.
-
+  
     ## Examples
-
+  
       iex> use MiniKanren
       iex> run(3, [out, x, y]) do
       ...>   appendo(x, y, [1, 2, 3, 4, 5])
@@ -174,16 +174,16 @@ defmodule MiniKanren do
       |> MK.reify
     end
   end
-
+  
   @doc """
   `run_all` accepts a list of one or more logic variables and a block containing
   one or more goals. The logic variables are bound into the lexical scope of the
   block, and the logical conjunction of the goals is performed. All results of the
   conjunction are evaluated, and are returned in terms of the first logic variable
   given.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([out, x, y]) do
       ...>   appendo(x, y, [1, 2, 3, 4, 5])
@@ -201,14 +201,14 @@ defmodule MiniKanren do
       |> MK.reify
     end
   end
-
+  
   # Impure operators
   @doc """
   `conda` accepts lists of goal clauses similar to `conde`, but returns the result
   of at most one clause: the first clause to have its first goal succeed.
-
+  
   ## Examples:
-
+  
       iex> use MiniKanren
       iex> run_all([out, x, y]) do
       ...>   conda do
@@ -225,20 +225,20 @@ defmodule MiniKanren do
       [h | []] -> quote do: {unquote(h), &MK.unit/1}
       [h | t]  -> quote do: {unquote(h), MK.bind_many!(unquote(t))}
     end)
-
+  
     quote do: fn pkg -> MK._conda(unquote(seqs), pkg) end
   end
   defmacro conda([do: single_clause]) do
     call = {:__block__, [], [single_clause]}
     quote do: MK.conda(do: unquote(call))
   end
-
+  
   @doc """
   `condu` is similar to `conda`, but takes only a single result from the first
   goal of the first successful clause.
-
+  
   ## Examples:
-
+  
       iex> use MiniKanren
       iex> run_all([out, x, y]) do
       ...>   condu do
@@ -254,20 +254,20 @@ defmodule MiniKanren do
       [h | []] -> quote do: {unquote(h), &MK.unit/1}
       [h | t]  -> quote do: {unquote(h), MK.bind_many!(unquote(t))}
     end)
-
+  
     quote do: fn pkg -> MK._condu(unquote(seqs), pkg) end
   end
   defmacro condu([do: single_clause]) do
     call = {:__block__, [], [single_clause]}
     quote do: MK.condu(do: unquote(call))
   end
-
+  
   @doc """
   `project` binds the associated value (if any) of one or more logic variables
   into lexical scope and allows them to be operated on.
-
+  
   ## Examples:
-
+  
       iex> use MiniKanren
       iex> run_all([out, x, y]) do
       ...>   eq(x, 3)
@@ -277,7 +277,7 @@ defmodule MiniKanren do
       ...>   end
       ...> end
       [10]
-
+  
       iex> use MiniKanren
       iex> run_all([out, x]) do
       ...>   project([x]) do
@@ -293,7 +293,7 @@ defmodule MiniKanren do
     bindings = Enum.map(vars, fn var ->
       quote do: unquote(var) = MK.walk_all(unquote(var), subs)
     end)
-
+  
     quote do
       fn pkg = {subs, _, _, _} ->
         unquote_splicing(bindings)
@@ -301,7 +301,7 @@ defmodule MiniKanren do
       end
     end
   end
-
+  
   # Wiring
   @doc """
   Helper function for the `run` macro. Inserts a goal to enforce constraints with
@@ -319,7 +319,7 @@ defmodule MiniKanren do
     end
     {:__block__, [], [single_goal, x]}
   end
-
+  
   @spec _conda(list({goal, goal}), package) :: goal_stream
   @doc """
   Helper function for the `conda` macro.
@@ -331,7 +331,7 @@ defmodule MiniKanren do
       a      -> bind(a, seq)
     end
   end
-
+  
   @spec _condu(list({goal, goal}), package) :: goal_stream
   @doc """
   Helper function for the `condu` macro.
@@ -344,34 +344,34 @@ defmodule MiniKanren do
       a        -> bind(a, seq)
     end
   end
-
+  
   # Internal wiring
   @spec var(non_neg_integer | reference) :: logic_variable
   @doc """
   Creates a new logic variable. Logic variables are represented as 1-tuples.
   """
   def var(c),  do: {c}
-
+  
   @spec vars(non_neg_integer, pos_integer) :: nonempty_list(logic_variable)
   def vars(c, n), do: Enum.map(c..(c + n - 1), &var/1)
-
+  
   @spec var?(any) :: boolean
   @doc """
   Checks whether the given argument is a logic variable.
   """
   def var?({_}), do: true
   def var?(_),   do: false
-
+  
   @spec unit(package) :: package
   @doc """
   """
   def unit(pkg), do: pkg
-
+  
   @spec mzero() :: :mzero
   @doc """
   """
   def mzero, do: :mzero
-
+  
   @spec mplus(goal_stream, (() -> goal_stream)) :: goal_stream
   @doc """
   """
@@ -383,7 +383,7 @@ defmodule MiniKanren do
   def mplus([h | t], s) do
     [h | fn -> mplus(s.(), t) end]
   end
-
+  
   @spec bind(goal_stream, goal) :: goal_stream
   @doc """
   """
@@ -395,7 +395,7 @@ defmodule MiniKanren do
   def bind([pkg | thunk], goal) do
     mplus(goal.(pkg), fn -> bind(thunk.(), goal) end)
   end
-
+  
   @spec walk(logic_value, substitution) :: logic_value
   @doc """
   """
@@ -411,7 +411,7 @@ defmodule MiniKanren do
       val   -> walk(val, subs)
     end
   end
-
+  
   @spec walk_all(logic_value, substitution) :: logic_value
   @doc """
   """
@@ -438,14 +438,14 @@ defmodule MiniKanren do
       Dict.put(subs, x, v)
     end
   end
-  def extend_substitution_logged(x, v, {subs, log}) when is_list(subs) do
+  def extend_substitution(x, v, subs) when is_list(subs) do
     if occurs_check(x, v, subs) do
       nil
     else
       Association.put(subs, x, v)
     end
   end
-
+  
   @spec extend_substitution_logged(logic_variable,
                                    logic_value,
                                    substitution_and_log) :: substitution_and_log | nil
@@ -467,7 +467,7 @@ defmodule MiniKanren do
       {Association.put(subs, x, v), [{x, v} | log]}
     end
   end
-
+  
   @spec occurs_check(logic_value, logic_value, substitution) :: boolean
   @doc """
   Ensures relating `x` and `v` will not introduce a circular relation to the
@@ -478,7 +478,7 @@ defmodule MiniKanren do
     var_v? = var?(v)
     occurs_check(x, v, var_v?, subs)
   end
-
+  
   @spec occurs_check(logic_value, logic_value, boolean, substitution) :: boolean
   defp occurs_check(v, v, true, _), do: true
   defp occurs_check(_, _, true, _), do: false
@@ -492,7 +492,7 @@ defmodule MiniKanren do
     occurs_check(x, a, s) or occurs_check(x, b, s) or occurs_check(x, c, s)
   end
   defp occurs_check(_, _, _, _), do: false
-
+  
   @spec unify(logic_value, logic_value, substitution | substitution_and_log) :: substitution_and_log | nil
   @doc """
   """
@@ -504,7 +504,7 @@ defmodule MiniKanren do
     unify(t1, var_t1?, t2, var_t2?, s)
   end
   def unify(t1, t2, subs), do: unify(t1, t2, {subs, []})
-
+  
   @spec unify(logic_value, boolean, logic_value, boolean, substitution_and_log) :: substitution_and_log | nil
   defp unify(t, _, t, _, subs), do: subs
   defp unify(t1, true, t2, _, subs), do: extend_substitution_logged(t1, t2, subs)
@@ -531,7 +531,7 @@ defmodule MiniKanren do
     end
   end
   defp unify(_, _, _, _, _), do: nil
-
+  
   # Goal constructor helpers
   @doc """
   Helper function for the `fresh` macro.
@@ -542,7 +542,7 @@ defmodule MiniKanren do
       {:__block__, _, goals} -> goals
       goal -> [goal]
     end
-
+  
     quote do
       fn {subs, cons, doms, counter} ->
         fn unquote(ls) ->
@@ -556,28 +556,28 @@ defmodule MiniKanren do
       {:__block__, _, goals} -> goals
       goal -> [goal]
     end
-
+  
     quote do
       fn pkg ->
         MK.bind_many!([pkg, unquote_splicing(seq)])
       end
     end
   end
-
+  
   def mplus_many([f]), do: f
   def mplus_many([f | t]),  do: mplus(f, fn -> mplus_many(t) end)
-
+  
   defmacro mplus_many!([fun | []]) do
     quote do: unquote(fun)
   end
   defmacro mplus_many!([fun | t]) do
     quote do: MK.mplus(unquote(fun), fn -> MK.mplus_many!(unquote(t)) end)
   end
-
+  
   def bind_many([f]), do: f
   def bind_many([f1, f2]), do: bind(f1, f2)
   def bind_many([f1, f2 | t]), do: bind_many([bind(f1, f2), t])
-
+  
   defmacro bind_many!([fun | []]) do
     quote do: unquote(fun)
   end
@@ -587,20 +587,20 @@ defmodule MiniKanren do
   defmacro bind_many!([fun1, fun2 | t]) do
     quote do: MK.bind_many!([MK.bind(unquote(fun1), unquote(fun2)), unquote_splicing(t)])
   end
-
+  
   # Interface helpers
   @spec empty_package() :: package
   @doc """
   Returns an empty package.
   """
   def empty_package, do: {Map.new, [], [], 0}
-
+  
   @spec call_empty_package(goal) :: goal_stream
   @doc """
   Calls a goal function with an empty_package.
   """
   def call_empty_package(g), do: g.(empty_package)
-
+  
   @spec take_all(goal_stream) :: list(package)
   @doc """
   Takes all values from the goal stream. May not terminate.
@@ -613,7 +613,7 @@ defmodule MiniKanren do
       [h | t] -> [h | take_all(t)]
     end
   end
-
+  
   @spec take(non_neg_integer, goal_stream) :: list(package)
   @doc """
   Take n values from the goal stream. May not terminate.
@@ -627,7 +627,7 @@ defmodule MiniKanren do
       [h | t] -> [h | take(n - 1, t)]
     end
   end
-
+  
   @spec reify([package]) :: [any]
   @doc """
   Reifies a list of packages with respect to the first logic variable.
@@ -635,12 +635,12 @@ defmodule MiniKanren do
   def reify(pkgs) do
     Enum.map(pkgs, fn pkg -> reify_pkg(pkg, var(0)) end)
   end
-
+  
   @spec reify_pkg(package, logic_variable) :: any
   @doc """
   Reifies a package with respect to a given logic variable.
   """
-  def reify_pkg(pkg = {subs, cons, doms, counter}, logic_var) do
+  def reify_pkg(pkg = {subs, cons, _, _}, logic_var) do
     v = walk_all(logic_var, subs)
     case reify_s(v, []) do
       [] -> unit(v)            # v contains no fresh variables
@@ -651,7 +651,7 @@ defmodule MiniKanren do
             end
     end
   end
-
+  
   @spec reify_s(logic_value, list_substitution) :: list_substitution
   @doc """
   Builds a substitution mapping all fresh variables in the result term to their
@@ -662,7 +662,7 @@ defmodule MiniKanren do
     var_v? = var?(v)
     reify_s(v, var_v?, subs)
   end
-
+  
   @spec reify_s(logic_value, boolean, list_substitution) :: list_substitution
   defp reify_s(var, true, subs) do
     name = Enum.count(subs) |> reify_name()
@@ -674,10 +674,10 @@ defmodule MiniKanren do
     reify_s(c, reify_s(b, reify_s(a, subs)))
   end
   defp reify_s(_, _, subs), do: subs
-
+  
   @spec reify_name(non_neg_integer) :: atom
   def reify_name(n), do: :"_#{n}"
-
+  
   # Currently using the process dictionary to store the three hooks needed for CLP
   # Perhaps a pure way of doing this? Store them in the package or something?
   def process_log do
@@ -689,24 +689,24 @@ defmodule MiniKanren do
   def reify_constraints do
     Process.get(:reify_constraints, &MiniKanren.reify_constraints_stub/2)
   end
-
+  
   def process_log_stub(_, _),       do: &MiniKanren.unit/1
   def enforce_constraints_stub(_),  do: &MiniKanren.unit/1
   def reify_constraints_stub(_, _), do: &MiniKanren.unit/1
-
+  
   # CLP stuff
   @spec constraint(goal, atom, list_substitution) :: constraint
   def constraint(goal, rator, rands), do: {goal, rator, rands}
-
+  
   @spec constraint_goal(constraint) :: goal
   def constraint_goal({goal, _, _}), do: goal
-
+  
   @spec constraint_operator(constraint) :: atom
   def constraint_operator({_, rator, _}), do: rator
-
+  
   @spec constraint_operands(constraint) :: list_substitution
   def constraint_operands({_, _, rands}), do: rands
-
+  
   @spec run_constraints(logic_variable_set, constraint_store) :: goal
   def run_constraints(_, []) do
     fn :mzero -> mzero
@@ -719,7 +719,7 @@ defmodule MiniKanren do
       false -> run_constraints(var_list, t)
     end
   end
-
+  
   @spec remove_and_run(constraint) :: goal
   def remove_and_run(c) do
     fn pkg = {subs, cons, doms, counter} ->
@@ -729,7 +729,7 @@ defmodule MiniKanren do
       end
     end
   end
-
+  
   @spec compose_m(goal, goal) :: goal
   @doc """
   Composes two goal functions.
@@ -742,7 +742,7 @@ defmodule MiniKanren do
       end
     end
   end
-
+  
   @spec extend_constraints(constraint, constraint_store) :: constraint_store
   @doc """
   Extends the constraint store if the given constraint contains any logic
@@ -757,7 +757,7 @@ defmodule MiniKanren do
   
   @spec extend_domains(logic_variable, domain, domain_store) :: domain_store
   def extend_domains(x, d, doms), do: [{x, d} | doms]
-
+  
   @spec subsumes?(unification_log, substitution) :: boolean
   def subsumes?(log, subs) do
     case unify_list(log, subs) do
@@ -765,7 +765,7 @@ defmodule MiniKanren do
       _          -> false
     end
   end
-
+  
   @spec unify_list(list_substitution,
                    substitution | substitution_and_log) :: substitution_and_log
   def unify_list([], subs = {_, _}), do: subs
@@ -776,7 +776,7 @@ defmodule MiniKanren do
       s   -> unify_list(t, s)
     end
   end
-
+  
   @spec any_var?(list_substitution) :: boolean
   @doc """
   Determines whether the list substitution contains any logic variables.
@@ -793,7 +793,7 @@ defmodule MiniKanren do
   def any_var?(x) do
     var?(x)
   end
-
+  
   @spec any_relevant_var?(list_substitution, logic_variable_set) :: boolean
   @doc """
   Determines whether the list substitution contains any of the logic variables in
@@ -813,13 +813,13 @@ defmodule MiniKanren do
   def any_relevant_var?(x, vars) do
     var?(x) and HashSet.member?(vars, x)
   end
-
+  
   @spec recover_vars(list_substitution) :: logic_variable_set
   @doc """
   Builds a set of all logic variables present in the list substitution.
   """
   def recover_vars(subs), do: recover_vars(subs, HashSet.new)
-
+  
   @spec recover_vars(list_substitution, logic_variable_set) :: logic_variable_set
   def recover_vars([{logic_var, logic_val} | t], var_set) do
     var_set = HashSet.put(var_set, logic_var)
@@ -830,20 +830,20 @@ defmodule MiniKanren do
   end
   def recover_vars([], var_set), do: var_set
 end
-
+  
 defmodule MiniKanren.Functions do
   @moduledoc """
   Some common relations used in miniKanren.
   """
-
+  
   use   MiniKanren, :no_functions
   alias MiniKanren, as: MK
-
+  
   @doc """
   `succeed` is a goal that always succeeds.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   eq(x, 1)
@@ -852,12 +852,12 @@ defmodule MiniKanren.Functions do
       [1]
   """
   def succeed, do: fn pkg -> MK.unit(pkg) end
-
+  
   @doc """
   `succeed` is a goal that ignores its argument and always succeeds.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   eq(x, 1)
@@ -866,12 +866,12 @@ defmodule MiniKanren.Functions do
       [1]
   """
   def succeed(_), do: fn pkg -> MK.unit(pkg) end
-
+  
   @doc """
   `fail` is a goal that always fails.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   eq(x, 1)
@@ -880,12 +880,12 @@ defmodule MiniKanren.Functions do
       []
   """
   def fail, do: fn _ -> MK.mzero end
-
+  
   @doc """
   `fail` is a goal that ignores its argument and always fails.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   eq(x, 1)
@@ -894,18 +894,18 @@ defmodule MiniKanren.Functions do
       []
   """
   def fail(_), do: fn _ -> MK.mzero end
-
+  
   @doc """
   `heado` relates `h` as the head of list `ls`.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   heado([1, 2, 3], x)
       ...> end
       [1]
-
+  
       iex> use MiniKanren
       iex> run_all([out, x]) do
       ...>   heado(out, x)
@@ -918,18 +918,18 @@ defmodule MiniKanren.Functions do
       eq([h | t], ls)
     end
   end
-
+  
   @doc """
   `tailo` relates `t` as the tail of list `ls`.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   tailo([1, 2, 3], x)
       ...> end
       [[2, 3]]
-
+  
       iex> use MiniKanren
       iex> run_all([out, x]) do
       ...>   tailo(out, x)
@@ -942,14 +942,14 @@ defmodule MiniKanren.Functions do
       eq([h | t], ls)
     end
   end
-
+  
   @doc """
   `conso` relates `h` and `t` as the head and tail of list `ls`.
-
+  
   Equivalent to `eq([h | t], ls)`.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([out, x, y]) do
       ...>   eq(x, 1)
@@ -957,7 +957,7 @@ defmodule MiniKanren.Functions do
       ...>   conso(x, y, out)
       ...> end
       [[1, 2, 3]]
-
+  
       iex> use MiniKanren
       iex> run_all([out, x, y]) do
       ...>   conso(x, y, [1, 2, 3])
@@ -966,12 +966,12 @@ defmodule MiniKanren.Functions do
       [{1, [2, 3]}]
   """
   def conso(h, t, ls), do: eq([h | t], ls)
-
+  
   @doc """
   `membero` relates `a` as being a member of the list `ls`.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([out, x, y]) do
       ...>   membero(x, [1, 2, 3])
@@ -979,7 +979,7 @@ defmodule MiniKanren.Functions do
       ...>   eq(out, {x, y})
       ...> end |> Enum.sort
       [{1, 4}, {1, 5}, {1, 6}, {2, 4}, {2, 5}, {2, 6}, {3, 4}, {3, 5}, {3, 6}]
-
+  
       iex> use MiniKanren
       iex> run(3, [x]) do
       ...>   membero("foo", x)
@@ -995,19 +995,19 @@ defmodule MiniKanren.Functions do
       end
     end
   end
-
+  
   @doc """
   `appendo` relates the list `ls` as the result of appending lists `l1` and `l2`.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([out, x, y]) do
       ...>   appendo(x, y, [1, 2, 3])
       ...>   eq(out, {x, y})
       ...> end
       [{[], [1, 2, 3]}, {[1], [2, 3]}, {[1, 2], [3]}, {[1, 2, 3], []}]
-
+  
       iex> use MiniKanren
       iex> run(5, [x]) do
       ...>   appendo(x, [], x)
@@ -1024,14 +1024,14 @@ defmodule MiniKanren.Functions do
        end]
     end
   end
-
+  
   @doc """
   `emptyo` relates `a` to the empty list.
-
+  
   Equivalent to `eq(a, [])`.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   emptyo(x)
@@ -1039,14 +1039,14 @@ defmodule MiniKanren.Functions do
       [[]]
   """
   def emptyo(a), do: eq(a, [])
-
+  
   # Non-relational functions
-
+  
   @doc """
   `onceo` accepts a goal function, and allows it to succeed at most once.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([out, x, y]) do
       ...>   onceo(appendo(x, y, [1, 2, 3, 4, 5]))
@@ -1059,13 +1059,13 @@ defmodule MiniKanren.Functions do
       [g]
     end
   end
-
+  
   @doc """
   `copy_term` copies the term associated with `x` to `y`, replacing any fresh
   logic variables in `x` with distinct fresh variables in `y`.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([out, x, y, a, b]) do
       ...>   eq(x, [a, b])
@@ -1073,7 +1073,7 @@ defmodule MiniKanren.Functions do
       ...>   eq(out, {x, y})
       ...> end
       [{[:_0, :_1], [:_2, :_3]}]
-
+  
       iex> use MiniKanren
       iex> run_all([out, x, y, a, b]) do
       ...>   eq(x, [a, b])
@@ -1088,7 +1088,7 @@ defmodule MiniKanren.Functions do
       eq(MK.walk_all(u, build_subs(u, Map.new)), v)
     end
   end
-
+  
   defp build_subs(u, subs) do
     case MK.var?(u) or u do
       true    -> Dict.put_new(subs, u, MK.var(make_ref))
@@ -1096,13 +1096,13 @@ defmodule MiniKanren.Functions do
       _       -> subs
     end
   end
-
+  
   @doc """
   `is` projects its argument `b`, and associates `a` with the result of the unary
   operation `f.(b)`
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([x, y]) do
       ...>   eq(y, 5)
@@ -1115,19 +1115,19 @@ defmodule MiniKanren.Functions do
       eq(a, f.(b))
     end
   end
-
+  
   @doc """
   `fresho` succeeds if its argument is a fresh logic variable, fails otherwise.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   fresho(x)
       ...>   eq(x, 1)
       ...> end
       [1]
-
+  
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   eq(x, 1)
@@ -1143,19 +1143,19 @@ defmodule MiniKanren.Functions do
       end
     end
   end
-
+  
   @doc """
   `staleo` fails if its argument is a fresh logic variable, succeeds otherwise.
-
+  
   ## Examples
-
+  
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   eq(x, 1)
       ...>   staleo(x)
       ...> end
       [1]
-
+  
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   staleo(x)
@@ -1172,13 +1172,13 @@ defmodule MiniKanren.Functions do
     end
   end
 end
-
+  
 defmodule Association do
   def new, do: []
-
+  
   def get([], _), do: false
   def get([{k, v} | _], k), do: v
   def get([_ | t], k), do: get(t, k)
-
+  
   def put(ls, k, v), do: [{k, v} | ls]
 end

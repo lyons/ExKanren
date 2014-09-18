@@ -84,7 +84,7 @@ defmodule MKCoreTest do
     assert(Enum.sort(y_l) == Enum.sort([{var(2), :foo}, {var(3), var(1)}]))
     assert(y_s == Enum.into([{var(2), :foo}, {var(3), var(1)}, {var(0), var(1)}], Map.new))
   end
-
+  
   test "allow for single-case conde" do
     assert [_]  = ( run_all [],  do: ( conde do: [succeed] ) )
     assert []  == ( run_all [],  do: ( conde do: [fail]    ) )

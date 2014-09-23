@@ -472,9 +472,10 @@ defmodule MiniKanren.CLP.FD do
   Attempts to retrieve the domain associated with logic variable `x` from the domain store. Returns
   `false` if no domain is found.
   """
-  def get_d(x, [{x, d} | _]), do: d
-  def get_d(x, [{_, _} | t]), do: get_d(x, t)
-  def get_d(_, []), do: false
+#  def get_d(x, [{x, d} | _]), do: d
+#  def get_d(x, [{_, _} | t]), do: get_d(x, t)
+#  def get_d(_, []), do: false
+  def get_d(x, doms), do: HashDict.get(doms, x, false)
   
   @spec value_d?(MK.logic_value) :: boolean
   @doc """

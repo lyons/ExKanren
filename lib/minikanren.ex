@@ -24,20 +24,20 @@ defmodule MiniKanren do
   end
   
   # Typespecs
-  @type package :: {map_substitution, constraint_store, domain_store, non_neg_integer}
+  @type package :: {dict_substitution, constraint_store, domain_store, non_neg_integer}
   @type goal_stream :: :mzero | package | (() -> goal_stream) | nonempty_improper_list(package, (() -> goal_stream))
   @type goal :: (package -> goal_stream)
   @type logic_variable :: {non_neg_integer}
   @type logic_variable_set :: HashSet.t
-  @type map_substitution :: %{logic_variable => logic_value}
+  @type dict_substitution :: HashDict.t
   @type list_substitution :: list({logic_variable, logic_value})
-  @type substitution :: map_substitution | list_substitution
+  @type substitution :: dict_substitution | list_substitution
   @type unification_log :: list_substitution
   @type substitution_and_log :: {substitution, unification_log}
   @type constraint :: {goal, atom, list}
   @type constraint_store :: list(constraint)
   @type domain :: list
-  @type domain_store :: list_substitution
+  @type domain_store :: HashDict.t
   @type logic_value :: any # Should be all types allowed in substitution
   
   # miniKanren operators
@@ -399,7 +399,7 @@ defmodule MiniKanren do
   @spec walk(logic_value, substitution) :: logic_value
   @doc """
   """
-  def walk(x, subs) when is_map(subs) do
+  def walk(x, subs = %HashDict{}) do
     case var?(x) and Dict.get(subs, x, false) do
       false -> x
       val   -> walk(val, subs)
@@ -431,11 +431,11 @@ defmodule MiniKanren do
   Extends the substitution `s` by relating the logic variable `x` with `v`,
   unless doing so creates a circular relation.
   """
-  def extend_substitution(x, v, subs) when is_map(subs) do
+  def extend_substitution(x, v, subs = %HashDict{}) do
     if occurs_check(x, v, subs) do
       nil
     else
-      Dict.put(subs, x, v)
+      HashDict.put(subs, x, v)
     end
   end
   def extend_substitution(x, v, subs) when is_list(subs) do
@@ -453,11 +453,11 @@ defmodule MiniKanren do
   Extends the substitution `s` by relating the logic variable `x` with `v`,
   unless doing so creates a circular relation.
   """
-  def extend_substitution_logged(x, v, {subs, log}) when is_map(subs) do
+  def extend_substitution_logged(x, v, {subs = %HashDict{}, log}) do
     if occurs_check(x, v, subs) do
       nil
     else
-      {Dict.put(subs, x, v), [{x, v} | log]}
+      {HashDict.put(subs, x, v), [{x, v} | log]}
     end
   end
   def extend_substitution_logged(x, v, {subs, log}) when is_list(subs) do
@@ -593,7 +593,7 @@ defmodule MiniKanren do
   @doc """
   Returns an empty package.
   """
-  def empty_package, do: {Map.new, [], [], 0}
+  def empty_package, do: {HashDict.new(), [], HashDict.new(), 0}
   
   @spec call_empty_package(goal) :: goal_stream
   @doc """
@@ -756,7 +756,8 @@ defmodule MiniKanren do
   end
   
   @spec extend_domains(logic_variable, domain, domain_store) :: domain_store
-  def extend_domains(x, d, doms), do: [{x, d} | doms]
+  #def extend_domains(x, d, doms), do: [{x, d} | doms]
+  def extend_domains(x, d, doms), do: HashDict.put(doms, x, d)
   
   @spec subsumes?(unification_log, substitution) :: boolean
   def subsumes?(log, subs) do
@@ -1085,13 +1086,13 @@ defmodule MiniKanren.Functions do
   """
   def copy_term(u, v) do
     project([u]) do
-      eq(MK.walk_all(u, build_subs(u, Map.new)), v)
+      eq(MK.walk_all(u, build_subs(u, HashDict.new)), v)
     end
   end
   
   defp build_subs(u, subs) do
     case MK.var?(u) or u do
-      true    -> Dict.put_new(subs, u, MK.var(make_ref))
+      true    -> HashDict.put_new(subs, u, MK.var(make_ref))
       [h | t] -> build_subs(t, build_subs(h, subs))
       _       -> subs
     end

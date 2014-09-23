@@ -576,7 +576,7 @@ defmodule MiniKanren do
   
   def bind_many([f]), do: f
   def bind_many([f1, f2]), do: bind(f1, f2)
-  def bind_many([f1, f2 | t]), do: bind_many([bind(f1, f2), t])
+  def bind_many([f1, f2 | t]), do: bind_many([bind(f1, f2) | t])
   
   defmacro bind_many!([fun | []]) do
     quote do: unquote(fun)

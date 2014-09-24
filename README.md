@@ -5,7 +5,7 @@ Relational programming in Elixir based on miniKanren.
 
 ## What's new
 * 2014-09-17: Constraints over finite domains of integers now impelemented
-* 2014-09-18: Working through the cKanren paper, CLP(Tree) is now implemented
+* 2014-09-09: Working through the cKanren paper, CLP(Tree) is now implemented
 
 ## TODO
 * Urgently need more thorough documentation

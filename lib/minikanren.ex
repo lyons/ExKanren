@@ -302,6 +302,16 @@ defmodule MiniKanren do
     end
   end
   
+  @spec conj_many([goal]) :: goal
+  @doc """
+  Returns the conjunction of a list of goals.
+  """
+  def conj_many(ls) when is_list(ls) do
+    fn pkg ->
+      bind_many([pkg | ls])
+    end
+  end
+  
   # Wiring
   @doc """
   Helper function for the `run` macro. Inserts a goal to enforce constraints with

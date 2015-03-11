@@ -12,28 +12,14 @@ defmodule MiniKanren.CLP.Tree do
   defmacro __using__(:no_functions) do
     quote do
       import MiniKanren.CLP.Tree, only: [neq: 2]
-    end
-  end
-  defmacro __using__(:no_hooks) do
-    quote do
-      import MiniKanren.CLP.Tree, only: [neq: 2]
-      import MiniKanren.CLP.Tree.Functions
-    end
-  end
-  defmacro __using__(:hooks) do
-    quote do
-      Process.put(:process_log, &MiniKanren.CLP.Tree.process_log/2)
-      Process.put(:enforce_constraints, &MiniKanren.CLP.Tree.enforce_constraints/1)
-      Process.put(:reify_constraints, &MiniKanren.CLP.Tree.reify_constraints/2)
+      alias  MiniKanren.CLP.Tree, as: CLP_Tree
     end
   end
   defmacro __using__(_) do
     quote do
       import MiniKanren.CLP.Tree, only: [neq: 2]
+      alias  MiniKanren.CLP.Tree, as: CLP_Tree
       import MiniKanren.CLP.Tree.Functions
-      Process.put(:process_log, &MiniKanren.CLP.Tree.process_log/2)
-      Process.put(:enforce_constraints, &MiniKanren.CLP.Tree.enforce_constraints/1)
-      Process.put(:reify_constraints, &MiniKanren.CLP.Tree.reify_constraints/2)
     end
   end
   
@@ -46,8 +32,7 @@ defmodule MiniKanren.CLP.Tree do
   
     iex> use MiniKanren
     iex> use MiniKanren.CLP.Tree
-    iex> use MiniKanren.CLP.Tree, :hooks
-    iex> run_all([out]) do
+    iex> run_all(CLP_Tree, [out]) do
     ...>   neq(out, 1)
     ...>   membero(out, [1, 2, 3])
     ...>   neq(out, 3)
@@ -56,16 +41,15 @@ defmodule MiniKanren.CLP.Tree do
   
     iex> use MiniKanren
     iex> use MiniKanren.CLP.Tree
-    iex> use MiniKanren.CLP.Tree, :hooks
-    iex> run_all([out]) do
+    iex> run_all(CLP_Tree, [out]) do
     ...>   neq(out, 2)
     ...> end
     [[:_0, :- | {:neq, [[{:_0, 2}]]}]]
   """
   def neq(u, v) do
-    fn pkg = {subs, _cons, _doms, _counter} ->
+    fn pkg = {subs, _cons, _doms, _counter, _solver} ->
       case unify(u, v, subs) do
-        nil        -> unit(pkg)
+        nil      -> unit(pkg)
         {_, log} -> neq_c(log).(pkg)
       end
     end
@@ -73,11 +57,11 @@ defmodule MiniKanren.CLP.Tree do
   
   @spec neq_c(MK.unification_log) :: MK.goal
   def neq_c(log) do
-    fn pkg = {subs, _cons, _doms, _counter} ->
+    fn pkg = {subs, _cons, _doms, _counter, _solver} ->
       case unify_list(log, subs) do
         nil         -> unit(pkg)
         {^subs, []} -> mzero
-        {_, log}  -> normalise_store(log, pkg) |> unit
+        {_, log}    -> normalise_store(log, pkg) |> unit
       end
     end
   end
@@ -94,7 +78,7 @@ defmodule MiniKanren.CLP.Tree do
   
   @spec reify_constraints(MK.logic_value, MK.list_substitution) :: any
   def reify_constraints(result_term, reified_names) do
-    fn _pkg = {_subs, cons, _doms, _counter} ->
+    fn _pkg = {_subs, cons, _doms, _counter, _solver} ->
       # Reify variable names in constraint operands
       reified_constraints = Enum.map(cons, fn c -> constraint_operands(c)
                                                    |> walk_all(reified_names) end)
@@ -109,7 +93,7 @@ defmodule MiniKanren.CLP.Tree do
   
 # Wiring --------------------------------------------------------------------------------------------
   @spec normalise_store(MK.unification_log, MK.package) :: MK.package
-  def normalise_store(log, pkg = {_, cons, _, _}) do
+  def normalise_store(log, pkg = {_, cons, _, _, _}) do
     normalise_store_loop(cons, [], pkg, log)
   end
   
@@ -126,9 +110,9 @@ defmodule MiniKanren.CLP.Tree do
         normalise_store_loop(t, [c | cons], pkg, log)
     end
   end
-  def normalise_store_loop([], cons, {subs, _, doms, counter}, log) do
+  def normalise_store_loop([], cons, {subs, _, doms, counter, solver}, log) do
     cons = constraint(neq_c(log), :neq_c, log) |> extend_constraints(cons)
-    {subs, cons, doms, counter}
+    {subs, cons, doms, counter, solver}
   end
 end
   
@@ -143,8 +127,7 @@ defmodule MiniKanren.CLP.Tree.Functions do
   
     iex> use MiniKanren
     iex> use MiniKanren.CLP.Tree
-    iex> use MiniKanren.CLP.Tree, :hooks
-    iex> run_all([out, x, y, z]) do
+    iex> run_all(CLP_Tree, [out, x, y, z]) do
     ...>   distincto([x, y, z])
     ...>   conde do
     ...>     [eq(x, 1), eq(y, 2), eq(z, 3)]
@@ -176,8 +159,7 @@ defmodule MiniKanren.CLP.Tree.Functions do
   
     iex> use MiniKanren
     iex> use MiniKanren.CLP.Tree
-    iex> use MiniKanren.CLP.Tree, :hooks
-    iex> run_all([out, x]) do
+    iex> run_all(CLP_Tree, [out, x]) do
     ...>   eq(x, [1, 2, 1, 3, 4, 5, 1])
     ...>   rembero(1, x, out)
     ...> end
@@ -204,8 +186,7 @@ defmodule MiniKanren.CLP.Tree.Functions do
   
     iex> use MiniKanren
     iex> use MiniKanren.CLP.Tree
-    iex> use MiniKanren.CLP.Tree, :hooks
-    iex> run_all([out, x]) do
+    iex> run_all(CLP_Tree, [out, x]) do
     ...>   eq(x, [1, 2, 1, 3, 4, 5, 1])
     ...>   rember_firsto(1, x, out)
     ...> end
@@ -234,8 +215,7 @@ defmodule MiniKanren.CLP.Tree.Functions do
   ## Examples
     iex> use MiniKanren
     iex> use MiniKanren.CLP.Tree
-    iex> use MiniKanren.CLP.Tree, :hooks
-    iex> run_all([out, x, y, z]) do
+    iex> run_all(CLP_Tree, [out, x, y, z]) do
     ...>   permuteo([x, y, z], [2, 3, 1])
     ...>   eq(out, [x, y, z])
     ...> end |> Enum.sort
@@ -243,8 +223,7 @@ defmodule MiniKanren.CLP.Tree.Functions do
   
     iex> use MiniKanren
     iex> use MiniKanren.CLP.Tree
-    iex> use MiniKanren.CLP.Tree, :hooks
-    iex> run_all([out, x, y, z]) do
+    iex> run_all(CLP_Tree, [out, x, y, z]) do
     ...>   permuteo([x, y, z], [2, 1, 1])
     ...>   eq(out, [x, y, z])
     ...> end |> Enum.sort

@@ -1,19 +1,18 @@
 defmodule CLPFDTest do
   use ExUnit.Case
   use MiniKanren
+  use MiniKanren.CLP.FD
   import MiniKanren.CLP.FD
   
   # Test cases get run in their own process, so we need to ensure each test case adds the correct
   # hooks to its process dictionary.
   
-  test "dom assigns a domain" do
-    use MiniKanren.CLP.FD, :hooks
-    
-    x = run_all([out]) do
+  test "dom assigns a domain" do    
+    x = run_all(CLP_FD, [out]) do
       dom(out, 1..5)
     end
     
-    y = run_all([out]) do
+    y = run_all(CLP_FD, [out]) do
       dom(out, [-1, 0, 1, 2, 3])
     end
     
@@ -21,10 +20,8 @@ defmodule CLPFDTest do
     assert(y == [-1, 0, 1, 2, 3])
   end
   
-  test "in_fd assigns a domain to multiple variables" do
-    use MiniKanren.CLP.FD, :hooks
-    
-    x = run_all([out, x, y]) do
+  test "in_fd assigns a domain to multiple variables" do    
+    x = run_all(CLP_FD, [out, x, y]) do
       eq(out, [x, y])
       in_fd([x, y], 2..4)
     end |> Enum.sort
@@ -33,9 +30,7 @@ defmodule CLPFDTest do
   end
   
   test "force_answer doesn't force irrelevant variables" do
-    use MiniKanren.CLP.FD, :hooks
-    
-    x = run_all([out, x, y]) do
+    x = run_all(CLP_FD, [out, x, y]) do
       eq(out, x)
       in_fd([x, y], 2..4)
     end
@@ -44,16 +39,14 @@ defmodule CLPFDTest do
   end
   
   test "lt_fd" do
-    use MiniKanren.CLP.FD, :hooks
-    
-    x = run_all([out, x, y]) do
+    x = run_all(CLP_FD, [out, x, y]) do
       eq(out, x)
       dom(x, 1..5)
       dom(y, 1..5)
       lt_fd(x, y)
     end
     
-    y = run_all([out, x, y]) do
+    y = run_all(CLP_FD, [out, x, y]) do
       eq(out, x)
       dom(x, 1..5)
       dom(y, 1..6)
@@ -65,9 +58,7 @@ defmodule CLPFDTest do
   end
   
   test "lte_fd" do
-    use MiniKanren.CLP.FD, :hooks
-    
-    x = run_all([out, x, y]) do
+    x = run_all(CLP_FD, [out, x, y]) do
       eq(out, x)
       dom(x, -5..-1)
       dom(y, -3..-1)
@@ -78,16 +69,14 @@ defmodule CLPFDTest do
   end
   
   test "gt_fd" do
-    use MiniKanren.CLP.FD, :hooks
-    
-    x = run_all([out, x, y]) do
+    x = run_all(CLP_FD, [out, x, y]) do
       eq(out, x)
       dom(x, 1..10)
       dom(y, [5])
       gt_fd(x, y)
     end
     
-    y = run_all([out, x, y]) do
+    y = run_all(CLP_FD, [out, x, y]) do
       eq(out, x)
       dom(x, 5..10)
       dom(y, [4])
@@ -99,9 +88,7 @@ defmodule CLPFDTest do
   end
   
   test "gte_fd" do
-    use MiniKanren.CLP.FD, :hooks
-    
-    x = run_all([out, x, y]) do
+    x = run_all(CLP_FD, [out, x, y]) do
       eq(out, x)
       dom(x, 1..10)
       dom(y, [5])
@@ -112,9 +99,7 @@ defmodule CLPFDTest do
   end
   
   test "sum_fd" do
-    use MiniKanren.CLP.FD, :hooks
-    
-    x = run_all([out, x, y, z]) do
+    x = run_all(CLP_FD, [out, x, y, z]) do
       eq(out, x)
       sum_fd(x, y, z)
       dom(x, 1..10)
@@ -122,7 +107,7 @@ defmodule CLPFDTest do
       dom(z, -2..2)
     end
     
-    y = run_all([out, x, y, z]) do
+    y = run_all(CLP_FD, [out, x, y, z]) do
       eq(out, y)
       sum_fd(x, y, z)
       dom(x, 1..3)
@@ -130,7 +115,7 @@ defmodule CLPFDTest do
       dom(z, -2..2)
     end
     
-    z = run_all([out, x, y, z]) do
+    z = run_all(CLP_FD, [out, x, y, z]) do
       eq(out, z)
       sum_fd(x, y, z)
       dom(x, 1..3)
@@ -144,15 +129,11 @@ defmodule CLPFDTest do
   end
     
 #  test "product_fd" do
-#    use MiniKanren.CLP.FD, :hooks
-#    
 #    assert(1 == 1)
 #  end
   
   test "neq_fd" do
-    use MiniKanren.CLP.FD, :hooks
-    
-    x = run_all([out, x, y]) do
+    x = run_all(CLP_FD, [out, x, y]) do
       eq(out, [x, y])
       neq_fd(x, y)
       in_fd([x, y], 1..3)
@@ -162,21 +143,19 @@ defmodule CLPFDTest do
   end
   
   test "distinct_fd" do
-    use MiniKanren.CLP.FD, :hooks
-    
-    x = run_all([out, x, y]) do
+    x = run_all(CLP_FD, [out, x, y]) do
       eq(out, [x, y])
       distinct_fd([x, y])
       in_fd([x, y], 1..3)
     end |> Enum.sort
     
-    y = run_all([out, x, y]) do
+    y = run_all(CLP_FD, [out, x, y]) do
       eq(out, [x, y])
       distinct_fd([x, y, 3])
       in_fd([x, y], 1..3)
     end |> Enum.sort
     
-    z = run_all([out, x, y, z]) do
+    z = run_all(CLP_FD, [out, x, y, z]) do
       eq(out, [x, y, z])
       distinct_fd([x, y, z])
       in_fd([x, y, z], 1..3)

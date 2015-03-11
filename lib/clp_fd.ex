@@ -31,26 +31,11 @@ defmodule MiniKanren.CLP.FD do
   import MiniKanren, except: [process_log: 2, enforce_constraints: 1, reify_constraints: 2]
   import MiniKanren.Functions, only: [succeed: 0, onceo: 1]
   
-  defmacro __using__(:no_hooks) do
-    quote do
-      import MiniKanren.CLP.FD, only: [dom: 2, in_fd: 2, lt_fd: 2, lte_fd: 2, gt_fd: 2, gte_fd: 2,
-                                       sum_fd: 3, product_fd: 3, neq_fd: 2, distinct_fd: 1]
-    end
-  end
-  defmacro __using__(:hooks) do
-    quote do
-      Process.put(:process_log, &MiniKanren.CLP.FD.process_log/2)
-      Process.put(:enforce_constraints, &MiniKanren.CLP.FD.enforce_constraints/1)
-      Process.put(:reify_constraints, &MiniKanren.CLP.FD.reify_constraints/2)
-    end
-  end
   defmacro __using__(_) do
     quote do
       import MiniKanren.CLP.FD, only: [dom: 2, in_fd: 2, lt_fd: 2, lte_fd: 2, gt_fd: 2, gte_fd: 2,
                                        sum_fd: 3, product_fd: 3, neq_fd: 2, distinct_fd: 1]
-      Process.put(:process_log, &MiniKanren.CLP.FD.process_log/2)
-      Process.put(:enforce_constraints, &MiniKanren.CLP.FD.enforce_constraints/1)
-      Process.put(:reify_constraints, &MiniKanren.CLP.FD.reify_constraints/2)
+      alias  MiniKanren.CLP.FD, as: CLP_FD
     end
   end
   
@@ -63,14 +48,14 @@ defmodule MiniKanren.CLP.FD do
   
     iex> use MiniKanren
     iex> use MiniKanren.CLP.FD
-    iex> run_all([x]) do
+    iex> run_all(CLP_FD, [x]) do
     ...>   dom(x, -3..1)
     ...> end
     [-3, -2, -1, 0, 1]
   """
   def dom(x, min..max), do: dom(x, range(min, max))
   def dom(x, n) when is_list(n) do
-    fn pkg = {subs, _, _, _} ->
+    fn pkg = {subs, _, _, _, _} ->
       process_d(walk(x, subs),
                 make_d(n)).(pkg)
     end
@@ -84,7 +69,7 @@ defmodule MiniKanren.CLP.FD do
   
     iex> use MiniKanren
     iex> use MiniKanren.CLP.FD
-    iex> run_all([out, x, y]) do
+    iex> run_all(CLP_FD, [out, x, y]) do
     ...>   eq(out, x)
     ...>   in_fd([x, y], 1..3)
     ...> end
@@ -92,7 +77,7 @@ defmodule MiniKanren.CLP.FD do
     
     iex> use MiniKanren
     iex> use MiniKanren.CLP.FD
-    iex> run_all([out, x, y]) do
+    iex> run_all(CLP_FD, [out, x, y]) do
     ...>   eq(out, y)
     ...>   in_fd([x, y], 1..3)
     ...> end
@@ -100,7 +85,7 @@ defmodule MiniKanren.CLP.FD do
   """
   def in_fd(xs, min..max), do: in_fd(xs, range(min, max))
   def in_fd(xs, n) when is_list(xs) and is_list(n) do
-    fn pkg = {subs, _, _, _} ->
+    fn pkg = {subs, _, _, _, _} ->
       Enum.reduce(xs, fn id -> id end,
         fn (x, acc) ->
           compose_m(process_d(walk(x, subs), make_d(n)), acc)
@@ -113,13 +98,13 @@ defmodule MiniKanren.CLP.FD do
   Constrains `u` so it must always take on a value less than the value of `v`.
   """
   def lt_fd(u, v) do
-    fn _pkg = {subs, cons, doms, counter} ->
+    fn _pkg = {subs, cons, doms, counter, solver} ->
       u = walk(u, subs); v = walk(v, subs)
       u_d = if var?(u) do get_d(u, doms) else make_d([u]) end
       v_d = if var?(v) do get_d(v, doms) else make_d([v]) end
       cons = constraint(lt_fd(u, v), :lt_fd, [u, v])
              |> extend_constraints(cons)
-      pkg = {subs, cons, doms, counter}
+      pkg = {subs, cons, doms, counter, solver}
       
       case Enum.all?([u_d, v_d]) do
         false -> pkg
@@ -136,13 +121,13 @@ defmodule MiniKanren.CLP.FD do
   Constrains `u` so it must always take on a value less than of equal to the value of `v`.
   """
   def lte_fd(u, v) do
-    fn _pkg = {subs, cons, doms, counter} ->
+    fn _pkg = {subs, cons, doms, counter, solver} ->
       u = walk(u, subs); v = walk(v, subs)
       u_d = if var?(u) do get_d(u, doms) else make_d([u]) end
       v_d = if var?(v) do get_d(v, doms) else make_d([v]) end
       cons = constraint(lte_fd(u, v), :lte_fd, [u, v])
              |> extend_constraints(cons)
-      pkg = {subs, cons, doms, counter}
+      pkg = {subs, cons, doms, counter, solver}
       
       case Enum.all?([u_d, v_d]) do
         false -> pkg
@@ -171,14 +156,14 @@ defmodule MiniKanren.CLP.FD do
   Constraint that ensures `u` + `v` = `w`.
   """
   def sum_fd(u, v, w) do
-    fn _pkg = {subs, cons, doms, counter} ->
+    fn _pkg = {subs, cons, doms, counter, solver} ->
       u = walk(u, subs); v = walk(v, subs); w = walk(w, subs)
       u_d = if var?(u) do get_d(u, doms) else make_d([u]) end
       v_d = if var?(v) do get_d(v, doms) else make_d([v]) end
       w_d = if var?(w) do get_d(w, doms) else make_d([w]) end
       cons = constraint(sum_fd(u, v, w), :sum_fd, [u, v, w])
              |> extend_constraints(cons)
-      pkg = {subs, cons, doms, counter}
+      pkg = {subs, cons, doms, counter, solver}
       
       case Enum.all?([u_d, v_d, w_d]) do
         false -> pkg
@@ -203,14 +188,14 @@ defmodule MiniKanren.CLP.FD do
   Constraint that ensures `u` * `v` = `w`.
   """
   def product_fd(u, v, w) do
-    fn _pkg = {subs, cons, doms, counter} ->
+    fn _pkg = {subs, cons, doms, counter, solver} ->
       u = walk(u, subs); v = walk(v, subs); w = walk(w, subs)
       u_d = if var?(u) do get_d(u, doms) else make_d([u]) end
       v_d = if var?(v) do get_d(v, doms) else make_d([v]) end
       w_d = if var?(w) do get_d(w, doms) else make_d([w]) end
       cons = constraint(product_fd(u, v, w), :product_fd, [u, v, w])
              |> extend_constraints(cons)
-      pkg = {subs, cons, doms, counter}
+      pkg = {subs, cons, doms, counter, solver}
       
       case Enum.all?([u_d, v_d, w_d]) do
         false ->
@@ -239,7 +224,7 @@ defmodule MiniKanren.CLP.FD do
   
     iex> use MiniKanren
     iex> use MiniKanren.CLP.FD
-    iex> run_all([out, x, y]) do
+    iex> run_all(CLP_FD, [out, x, y]) do
     ...>   eq(out, [x, y])
     ...>   dom(x, 1..2)
     ...>   dom(y, 2..3)
@@ -248,7 +233,7 @@ defmodule MiniKanren.CLP.FD do
     [[1, 2], [1, 3], [2, 3]]
   """
   def neq_fd(u, v) do
-    fn pkg = {subs, cons, doms, counter} ->
+    fn pkg = {subs, cons, doms, counter, solver} ->
       u = walk(u, subs); v = walk(v, subs)
       u_d = if var?(u) do get_d(u, doms) else make_d([u]) end
       v_d = if var?(v) do get_d(v, doms) else make_d([v]) end
@@ -256,7 +241,7 @@ defmodule MiniKanren.CLP.FD do
         (u_d == false) or (v_d == false) ->
           cons = constraint(neq_fd(u, v), :neq_fd, [u, v])
           |> extend_constraints(cons)
-          {subs, cons, doms, counter}
+          {subs, cons, doms, counter, solver}
         singleton_d?(u_d) and singleton_d?(v_d) and (u_d == v_d) ->
           mzero()
         disjoint_d?(u_d, v_d) ->
@@ -264,7 +249,7 @@ defmodule MiniKanren.CLP.FD do
         :else ->
           cons = constraint(neq_fd(u, v), :neq_fd, [u, v])
           |> extend_constraints(cons)
-          pkg = {subs, cons, doms, counter}
+          pkg = {subs, cons, doms, counter, solver}
           cond do
             singleton_d?(u_d) -> process_d(v, diff_d(v_d, u_d)).(pkg)
             singleton_d?(v_d) -> process_d(u, diff_d(u_d, v_d)).(pkg)
@@ -282,7 +267,7 @@ defmodule MiniKanren.CLP.FD do
   
     iex> use MiniKanren
     iex> use MiniKanren.CLP.FD
-    iex> run(5, [out, x, y, z]) do
+    iex> run(5, CLP_FD, [out, x, y, z]) do
     ...>   eq(out, [x, y, z])
     ...>   in_fd([x, y], 1..3)
     ...>   dom(z, 2..4)
@@ -292,7 +277,7 @@ defmodule MiniKanren.CLP.FD do
     
     iex> use MiniKanren
     iex> use MiniKanren.CLP.FD
-    iex> run_all([out, x, y]) do
+    iex> run_all(CLP_FD, [out, x, y]) do
     ...>   eq(out, [x, y])
     ...>   in_fd([x, y], 1..3)
     ...>   distinct_fd([x, y, 2])
@@ -300,12 +285,12 @@ defmodule MiniKanren.CLP.FD do
     [[1, 3], [3, 1]]
   """
   def distinct_fd(vs) do
-    fn pkg = {subs, cons, doms, counter} ->
+    fn pkg = {subs, cons, doms, counter, solver} ->
       vs = walk(vs, subs)
       if var?(vs) do
         cons = constraint(distinct_fd(vs), :distinct_fd, [vs])
                |> extend_constraints(cons)
-        {subs, cons, doms, counter}
+        {subs, cons, doms, counter, solver}
       else
         {xs, ns} = Enum.partition(vs, &MK.var?/1)
         ns = Enum.sort(ns)
@@ -325,7 +310,7 @@ defmodule MiniKanren.CLP.FD do
   end
   
   @spec distinct_fd_c([MK.logic_variable], [integer], [MK.logic_variable], MK.package) :: MK.goal_stream
-  def distinct_fd_c([h | t], ns, xs, pkg = {subs, _, _, _}) do
+  def distinct_fd_c([h | t], ns, xs, pkg = {subs, _, _, _, _}) do
     y = walk(h, subs)
     cond do
       var?(y) ->
@@ -338,10 +323,10 @@ defmodule MiniKanren.CLP.FD do
     end
   end
   
-  def distinct_fd_c([], ns, xs, _pkg = {subs, cons, doms, counter}) do
+  def distinct_fd_c([], ns, xs, _pkg = {subs, cons, doms, counter, solver}) do
     cons = constraint(distinct_fd_c(xs, ns), :distinct_fd, [xs, ns])
            |> extend_constraints(cons)
-    pkg = {subs, cons, doms, counter}
+    pkg = {subs, cons, doms, counter, solver}
     exclude_from_d(make_d(ns), doms, xs).(pkg)
   end
   
@@ -350,7 +335,7 @@ defmodule MiniKanren.CLP.FD do
   def process_log([{x, v} | t], cons) do
     t = compose_m(run_constraints(Enum.into([x], HashSet.new), cons),
                   process_log(t, cons))
-    fn pkg = {_, _, doms, _} ->
+    fn pkg = {_, _, doms, _, _} ->
       case get_d(x, doms) do
         false -> t.(pkg)
         d     -> compose_m(process_d(v, d), t).(pkg)
@@ -363,7 +348,7 @@ defmodule MiniKanren.CLP.FD do
   def enforce_constraints(x) do
     fresh([]) do
       force_answer(x)
-      fn pkg = {_, cons, doms, _} ->
+      fn pkg = {_, cons, doms, _, _} ->
         bound_vars = Enum.map(doms, fn {var, _} -> var end)
         verify_all_bound(cons, bound_vars)
         onceo(force_answer(bound_vars)).(pkg)
@@ -373,7 +358,7 @@ defmodule MiniKanren.CLP.FD do
   
   @spec force_answer([MK.logic_variable] | MK.logic_variable) :: MK.goal
   def force_answer(x) do
-    fn pkg = {subs, _, doms, _} ->
+    fn pkg = {subs, _, doms, _, _} ->
       x = walk(x, subs)
       f = cond do
         d = var?(x) and get_d(x, doms) ->
@@ -433,7 +418,7 @@ defmodule MiniKanren.CLP.FD do
   
   @spec update_var_d(MK.logic_variable, MK.domain) :: MK.goal
   def update_var_d(x, d) do
-    fn pkg = {_, _, doms, _} ->
+    fn pkg = {_, _, doms, _, _} ->
       case get_d(x, doms) do
         false -> resolve_storable_d(d, x).(pkg)
         xd    -> case intersection_d(xd, d) do
@@ -446,12 +431,12 @@ defmodule MiniKanren.CLP.FD do
   
   @spec resolve_storable_d(MK.domain, MK.logic_variable) :: MK.goal
   def resolve_storable_d(d, x) do
-    fn _pkg = {subs, cons, doms, counter} ->
+    fn _pkg = {subs, cons, doms, counter, solver} ->
       case d do
         [n] -> var_set = Enum.into([x], HashSet.new())
-               extended_pkg = {extend_substitution(x, n, subs), cons, doms, counter}
+               extended_pkg = {extend_substitution(x, n, subs), cons, doms, counter, solver}
                run_constraints(var_set, cons).(extended_pkg)
-        _   -> {subs, cons, extend_domains(x, d, doms), counter}
+        _   -> {subs, cons, extend_domains(x, d, doms), counter, solver}
       end
     end
   end

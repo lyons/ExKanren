@@ -10,15 +10,15 @@ defmodule MiniKanren do
     # It is bad when MiniKanren.Functions tries to import itself
     quote do
       require MiniKanren
-      import  MiniKanren, only: [eq: 2, conde: 1, run_all: 2, run: 3, fresh: 2,
-                                 conda: 1, condu: 1, project: 2]
+      import  MiniKanren, only: [eq: 2, conde: 1, run_all: 2, run_all: 3, run: 3, run: 4,
+                                 fresh: 2, conda: 1, condu: 1, project: 2]
     end
   end
   defmacro __using__(_) do
     quote do
       require MiniKanren
-      import  MiniKanren, only: [eq: 2, conde: 1, run_all: 2, run: 3, fresh: 2,
-                                 conda: 1, condu: 1, project: 2]
+      import  MiniKanren, only: [eq: 2, conde: 1, run_all: 2, run_all: 3, run: 3, run: 4,
+                                 fresh: 2, conda: 1, condu: 1, project: 2]
       import  MiniKanren.Functions
     end
   end
@@ -70,11 +70,11 @@ defmodule MiniKanren do
       []
   """
   def eq(u, v) do
-    fn pkg = {subs, cons, doms, counter} ->
+    fn pkg = {subs, cons, doms, counter, solver} ->
       case unify(u, v, subs) do
         nil -> mzero
         {^subs, []} -> unit(pkg)
-        {s, log}    -> process_log.(log, cons).({s, cons, doms, counter})
+        {s, log}    -> solver.process_log(log, cons).({s, cons, doms, counter, solver})
       end
     end
   end
@@ -169,18 +169,28 @@ defmodule MiniKanren do
     enforced_do = insert_enforce_constraints(do_block)
     quote do
       s = fresh(unquote(vars), [do: unquote(enforced_do)])
-      |> MK.call_empty_package
+      |> MK.call_empty_package(MiniKanren)
+      MK.take(unquote(n), s)
+      |> MK.reify
+    end
+  end
+
+  defmacro run(n, solver, vars, [do: do_block]) do
+    enforced_do = insert_enforce_constraints(do_block)
+    quote do
+      s = fresh(unquote(vars), [do: unquote(enforced_do)])
+      |> MK.call_empty_package(unquote(solver))
       MK.take(unquote(n), s)
       |> MK.reify
     end
   end
   
   @doc """
-  `run_all` accepts a list of one or more logic variables and a block containing
-  one or more goals. The logic variables are bound into the lexical scope of the
-  block, and the logical conjunction of the goals is performed. All results of the
-  conjunction are evaluated, and are returned in terms of the first logic variable
-  given.
+  `run_all` accepts a list of one or more logic variables, an optional module name
+  for a constraint solver, and a block containing one or more goals. The logic
+  variables are bound into the lexical scope of the block, and the logical
+  conjunction of the goals is performed. All results of the conjunction are
+  evaluated, and are returned in terms of the first logic variable given.
   
   ## Examples
   
@@ -196,7 +206,17 @@ defmodule MiniKanren do
     enforced_do = insert_enforce_constraints(do_block)
     quote do
       fresh(unquote(vars), [do: unquote(enforced_do)])
-      |> MK.call_empty_package
+      |> MK.call_empty_package(MiniKanren)
+      |> MK.take_all
+      |> MK.reify
+    end
+  end
+  
+  defmacro run_all(solver, vars, [do: do_block]) do
+    enforced_do = insert_enforce_constraints(do_block)
+    quote do
+      fresh(unquote(vars), [do: unquote(enforced_do)])
+      |> MK.call_empty_package(unquote(solver))
       |> MK.take_all
       |> MK.reify
     end
@@ -295,7 +315,7 @@ defmodule MiniKanren do
     end)
   
     quote do
-      fn pkg = {subs, _, _, _} ->
+      fn pkg = {subs, _, _, _, _} ->
         unquote_splicing(bindings)
         MK.fresh([], [do: unquote(do_block)]).(pkg)
       end
@@ -319,13 +339,13 @@ defmodule MiniKanren do
   """
   def insert_enforce_constraints({:__block__, metadata, ls}) do
     x = quote do
-      MK.enforce_constraints.(MK.var(0))
+      MK.enforce_constraints_goal(MK.var(0))
     end
     {:__block__, metadata, ls ++ [x]}
   end
   def insert_enforce_constraints(single_goal) do
     x = quote do
-      MK.enforce_constraints.(MK.var(0))
+      MK.enforce_constraints_goal(MK.var(0))
     end
     {:__block__, [], [single_goal, x]}
   end
@@ -554,9 +574,9 @@ defmodule MiniKanren do
     end
   
     quote do
-      fn {subs, cons, doms, counter} ->
+      fn {subs, cons, doms, counter, solver} ->
         fn unquote(ls) ->
-          MK.bind_many!([{subs, cons, doms, counter + unquote(length)}, unquote_splicing(seq)])
+          MK.bind_many!([{subs, cons, doms, counter + unquote(length), solver}, unquote_splicing(seq)])
         end.(MK.vars(counter, unquote(length)))
       end
     end
@@ -599,17 +619,17 @@ defmodule MiniKanren do
   end
   
   # Interface helpers
-  @spec empty_package() :: package
+  @spec empty_package(atom) :: package
   @doc """
-  Returns an empty package.
+  Returns an empty package with the given constraint solver.
   """
-  def empty_package, do: {HashDict.new(), [], HashDict.new(), 0}
+  def empty_package(solver \\ MiniKanren), do: {HashDict.new(), [], HashDict.new(), 0, solver}
   
-  @spec call_empty_package(goal) :: goal_stream
+  @spec call_empty_package(goal, atom) :: goal_stream
   @doc """
   Calls a goal function with an empty_package.
   """
-  def call_empty_package(g), do: g.(empty_package)
+  def call_empty_package(g, solver), do: g.(empty_package(solver))
   
   @spec take_all(goal_stream) :: list(package)
   @doc """
@@ -650,14 +670,14 @@ defmodule MiniKanren do
   @doc """
   Reifies a package with respect to a given logic variable.
   """
-  def reify_pkg(pkg = {subs, cons, _, _}, logic_var) do
+  def reify_pkg(pkg = {subs, cons, _, _, solver}, logic_var) do
     v = walk_all(logic_var, subs)
     case reify_s(v, []) do
       [] -> unit(v)            # v contains no fresh variables
       r  -> v = walk_all(v, r) # replace fresh variables with reified names
             case cons do
               [] -> unit(v)
-              _  -> reify_constraints.(v, r).(pkg)
+              _  -> solver.reify_constraints(v, r).(pkg)
             end
     end
   end
@@ -690,19 +710,25 @@ defmodule MiniKanren do
   
   # Currently using the process dictionary to store the three hooks needed for CLP
   # Perhaps a pure way of doing this? Store them in the package or something?
-  def process_log do
-    Process.get(:process_log, &MiniKanren.process_log_stub/2)
-  end
-  def enforce_constraints do
-    Process.get(:enforce_constraints, &MiniKanren.enforce_constraints_stub/1)
-  end
-  def reify_constraints do
-    Process.get(:reify_constraints, &MiniKanren.reify_constraints_stub/2)
+#  def process_log do
+#    Process.get(:process_log, &MiniKanren.process_log_stub/2)
+#  end
+#  def enforce_constraints do
+#    Process.get(:enforce_constraints, &MiniKanren.enforce_constraints_stub/1)
+#  end
+#  def reify_constraints do
+#    Process.get(:reify_constraints, &MiniKanren.reify_constraints_stub/2)
+#  end
+  
+  def enforce_constraints_goal(var) do
+    fn pkg = {_, _, _, _, solver} ->
+      solver.enforce_constraints(var).(pkg)
+    end
   end
   
-  def process_log_stub(_, _),       do: &MiniKanren.unit/1
-  def enforce_constraints_stub(_),  do: &MiniKanren.unit/1
-  def reify_constraints_stub(_, _), do: &MiniKanren.unit/1
+  def process_log(_, _),       do: &MiniKanren.unit/1
+  def enforce_constraints(_),  do: &MiniKanren.unit/1
+  def reify_constraints(_, _), do: &MiniKanren.unit/1
   
   # CLP stuff
   @spec constraint(goal, atom, list_substitution) :: constraint
@@ -732,10 +758,10 @@ defmodule MiniKanren do
   
   @spec remove_and_run(constraint) :: goal
   def remove_and_run(c) do
-    fn pkg = {subs, cons, doms, counter} ->
+    fn pkg = {subs, cons, doms, counter, solver} ->
       case List.delete(cons, c) do
         ^cons -> pkg
-        cons  -> constraint_goal(c).({subs, cons, doms, counter})
+        cons  -> constraint_goal(c).({subs, cons, doms, counter, solver})
       end
     end
   end
@@ -1147,7 +1173,7 @@ defmodule MiniKanren.Functions do
       []
   """
   def fresho(v) do
-    fn pkg = {subs, _, _, _} ->
+    fn pkg = {subs, _, _, _, _} ->
       case MK.var?(MK.walk(v, subs)) do
         false -> MK.mzero
         _     -> MK.unit(pkg)
@@ -1175,7 +1201,7 @@ defmodule MiniKanren.Functions do
       []
   """
   def staleo(v) do
-    fn pkg = {subs, _, _, _} ->
+    fn pkg = {subs, _, _, _, _} ->
       case MK.var?(MK.walk(v, subs)) do
         false -> MK.unit(pkg)
         _     -> MK.mzero

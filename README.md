@@ -4,6 +4,7 @@ ExKanren
 Relational programming in Elixir based on miniKanren.
 
 ## What's new
+* 2015-03-10: The constraint solver being used is now passed as an optional parameter to the `run` interface rather than being set in the process dictionary. This makes ExKanren purely functional and enables experimenting with running goals in parallel.
 * 2014-09-17: Constraints over finite domains of integers now implemented
 * 2014-09-09: Working through the cKanren paper, CLP(Tree) is now implemented
 
@@ -12,16 +13,16 @@ Relational programming in Elixir based on miniKanren.
 * Nominal logic
 
 ## Usage
-`MiniKanren` defines the pure and impure operators of miniKanren, and `MiniKanren.Functions` implements some of the common relations. `use MiniKanren` will import both `MiniKanren` and `MiniKanren.Functions`.
+`MiniKanren` defines the relational and non-relational operators of miniKanren, and `MiniKanren.Functions` implements some of the common relations. `use MiniKanren` will import both `MiniKanren` and `MiniKanren.Functions`.
 
-`MiniKanren.CLP.Tree` provides the tree disequality operator `neq`, and the runtime hooks needed to use disequality constraints. `use MiniKanren.CLP.Tree` will import the operator and some common relations that rely on it and will set the process dictionary with the hooks needed to run CLP(Tree).
+`MiniKanren.CLP.Tree` provides the tree disequality operator `neq`. `use MiniKanren.CLP.Tree` will import the operator and some common relations that rely on it, and for convenience will alias `MiniKanren.CLP.Tree` to `CLP_Tree`.
 
-`MiniKanren.CLP.FD` provides operators for finite domains of integers, and the runtime hooks needed to use them. `use MiniKanren.CLP.FD` will import the operator and some common relations that rely on it and will set the process dictionary with the hooks needed to run CLP(FD). 
+`MiniKanren.CLP.FD` provides operators for operations on finite domains of integers. `use MiniKanren.CLP.FD` will import the operator and some common relations that rely on it, and for convenience will alias `MiniKanren.CLP.FD` to `CLP_FD`. 
 
 ```elixir
 use MiniKanren
 use MiniKanren.CLP.Tree
-run_all([out, x]) do
+run_all(CLP_Tree, [out, x]) do
   eq(x, [:good_night, :kittens, :good_night, :mittens,
          :good_night, :clocks, :good_night, :socks])
   rembero(:good_night, x, out)

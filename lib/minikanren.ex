@@ -354,7 +354,7 @@ defmodule MiniKanren do
   @doc """
   Helper function for the `conda` macro.
   """
-  def _conda([], _), do: []
+  def _conda([], _), do: :mzero
   def _conda([{h, seq} | t], pkg) do
     case h.(pkg) do
       :mzero -> _conda(t, pkg)
@@ -366,7 +366,7 @@ defmodule MiniKanren do
   @doc """
   Helper function for the `condu` macro.
   """
-  def _condu([], _), do: []
+  def _condu([], _), do: :mzero
   def _condu([{h, seq} | t], pkg) do
     case h.(pkg) do
       :mzero   -> _condu(t, pkg)

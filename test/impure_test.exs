@@ -14,6 +14,14 @@ defmodule MKImpureTest do
     assert(result == ["First success"])
   end
   
+  test "conda doesn't blow up when no clauses succeed" do
+    run_all([_x]) do
+      conda do
+        [fail]
+      end
+    end
+  end
+  
   test "condu ignores clauses after first success" do
     result = run_all([x]) do
       condu do
@@ -24,6 +32,14 @@ defmodule MKImpureTest do
     end
     
     assert(result == [4])
+  end
+  
+  test "condu doesn't blow up when no clauses succeed" do
+    run_all([_x]) do
+      condu do
+        [fail]
+      end
+    end
   end
   
   test "onceo succeeds at most once" do

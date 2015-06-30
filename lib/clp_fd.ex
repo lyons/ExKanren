@@ -11,6 +11,7 @@ defmodule MiniKanren.CLP.FD do
   """
   
   ## TODO
+  ## This is a mess
   ## Domains use a list to represent an ordered set, use a better data structure for this
   ## sum_fd and product_fd should be able to force a domain on the third variable when two variables
   ##   have been bound to domains
@@ -28,7 +29,7 @@ defmodule MiniKanren.CLP.FD do
   # f -> function
   
   alias  MiniKanren, as: MK
-  import MiniKanren, except: [process_log: 2, enforce_constraints: 1, reify_constraints: 2]
+  import MiniKanren, except: [post_unify: 2, enforce_constraints: 1, reify_constraints: 2]
   import MiniKanren.Functions, only: [succeed: 0, onceo: 1]
   
   defmacro __using__(_) do
@@ -331,10 +332,10 @@ defmodule MiniKanren.CLP.FD do
   end
   
 # CLP Hooks -----------------------------------------------------------------------------------------
-  @spec process_log(MK.unification_log, MK.constraint_store) :: MK.goal
-  def process_log([{x, v} | t], cons) do
+    @spec post_unify(MK.unification_log, MK.constraint_store) :: MK.goal
+  def post_unify([{x, v} | t], cons) do
     t = compose_m(run_constraints(Enum.into([x], HashSet.new), cons),
-                  process_log(t, cons))
+                  post_unify(t, cons))
     fn pkg = {_, _, doms, _, _} ->
       case get_d(x, doms) do
         false -> t.(pkg)
@@ -342,7 +343,7 @@ defmodule MiniKanren.CLP.FD do
       end
     end
   end
-  def process_log([], _), do: fn pkg -> pkg end
+  def post_unify([], _), do: fn pkg -> pkg end
     
   @spec enforce_constraints(MK.logic_variable) :: MK.goal
   def enforce_constraints(x) do
@@ -400,6 +401,9 @@ defmodule MiniKanren.CLP.FD do
   def reify_constraints(_, _) do
     raise("Oops")
   end
+  
+  def empty_constraint_store(), do: []
+  def empty_domain_store(), do: HashDict.new
   
 # Wiring --------------------------------------------------------------------------------------------
   @spec process_d(MK.logic_value, MK.domain) :: MK.goal
@@ -670,4 +674,99 @@ defmodule MiniKanren.CLP.FD do
       {false, false, false, false} -> range(lower.(w_max, u_min), upper.(w_min, u_max))
     end
   end
+  
+## --------------------------------------------------------------------------------------------------
+## CLP stuff yoinked from the MiniKanren module and unceremoniously dumped here.
+  
+  #@spec any_var?(list_substitution) :: boolean
+  @doc """
+  Determines whether the list substitution contains any logic variables.
+  """
+  def any_var?([h | t]) do
+    any_var?(h) or any_var?(t)
+  end
+  def any_var?({a, b}) do
+    any_var?(a) or any_var?(b)
+  end
+  def any_var?({a, b, c}) do
+    any_var?(a) or any_var?(b) or any_var?(c)
+  end
+  def any_var?(x) do
+    var?(x)
+  end
+  
+  #@spec compose_m(goal, goal) :: goal
+  @doc """
+  Composes two goal functions.
+  """
+  def compose_m(f1, f2) do
+    fn pkg ->
+      case f1.(pkg) do
+        :mzero -> mzero()
+        a  -> f2.(a)
+      end
+    end
+  end
+  
+  #@spec extend_constraints(constraint, constraint_store) :: constraint_store
+  @doc """
+  Extends the constraint store if the given constraint contains any logic
+  variables.
+  """
+  def extend_constraints(c, cons) do
+    case constraint_operands(c) |> any_var?() do
+      true  -> [c | cons]
+      false -> cons
+    end
+  end
+  
+  #@spec constraint(goal, atom, list_substitution) :: constraint
+  def constraint(goal, rator, rands), do: {goal, rator, rands}
+  
+  #@spec constraint_goal(constraint) :: goal
+  def constraint_goal({goal, _, _}), do: goal
+  
+  #@spec constraint_operator(constraint) :: atom
+  def constraint_operator({_, rator, _}), do: rator
+  
+  #@spec constraint_operands(constraint) :: list_substitution
+  def constraint_operands({_, _, rands}), do: rands
+  
+  def run_constraints(_, []) do
+    fn :mzero -> mzero
+       x  -> unit(x)
+    end
+  end
+  def run_constraints(var_list, [h | t]) do
+    case any_relevant_var?(constraint_operands(h), var_list) do
+      true  -> compose_m(remove_and_run(h), run_constraints(var_list, t))
+      false -> run_constraints(var_list, t)
+    end
+  end
+  
+  def any_relevant_var?([h | t], vars) do
+    any_relevant_var?(h, vars) or any_relevant_var?(t, vars)
+  end
+  def any_relevant_var?({a, b}, vars) do
+    any_relevant_var?(a, vars) or any_relevant_var?(b, vars)
+  end
+  def any_relevant_var?({a, b, c}, vars) do
+    any_relevant_var?(a, vars) or
+    any_relevant_var?(b, vars) or
+    any_relevant_var?(c, vars)
+  end
+  def any_relevant_var?(x, vars) do
+    var?(x) and HashSet.member?(vars, x)
+  end
+  
+  def remove_and_run(c) do
+    fn pkg = {subs, cons, doms, counter, solver} ->
+      case List.delete(cons, c) do
+        ^cons -> pkg
+        cons  -> constraint_goal(c).({subs, cons, doms, counter, solver})
+      end
+    end
+  end
+  
+  def extend_domains(x, d, doms), do: HashDict.put(doms, x, d)
 end

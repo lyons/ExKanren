@@ -7,7 +7,6 @@ defmodule MiniKanren do
   alias MiniKanren, as: MK
   
   defmacro __using__(:no_functions) do
-    # It is bad when MiniKanren.Functions tries to import itself
     quote do
       require MiniKanren
       import  MiniKanren, only: [eq: 2, conde: 1, run_all: 2, run_all: 3, run: 3, run: 4,
@@ -23,25 +22,35 @@ defmodule MiniKanren do
     end
   end
   
-  # Typespecs
-  @type constraint_solver :: atom
-  @type package :: {dict_substitution, constraint_store, domain_store, non_neg_integer, constraint_solver}
-  @type goal_stream :: :mzero | package | (() -> goal_stream) | nonempty_improper_list(package, (() -> goal_stream))
-  @type goal :: (package -> goal_stream)
   @type logic_variable :: {non_neg_integer}
   @type logic_variable_set :: HashSet.t
-  @type dict_substitution :: HashDict.t
+  @type logic_term :: any
+#   This seems to confuse the dialyzer in an impressive way
+#  @type logic_term :: logic_variable
+#                      | atom
+#                      | float
+#                      | integer
+#                      | list(logic_term)
+#                      | {logic_term, logic_term}
+#                      | {logic_term, logic_term, logic_term}
+  
+  @type constraint_store :: any
+  @type domain_store :: any
+  @type constraint_solver :: atom
+  @type package :: {substitution, constraint_store, domain_store, non_neg_integer, constraint_solver}
+
+  @type goal :: (package -> goal_stream)
+  @type goal_stream :: :mzero
+                       | package
+                       | (() -> goal_stream)
+                       | nonempty_improper_list(package, (() -> goal_stream))
+  
+  @type dict_substitution :: %{logic_variable => logic_term}
   @type list_substitution :: list({logic_variable, logic_term})
   @type substitution :: dict_substitution | list_substitution
   @type unification_log :: list_substitution
   @type substitution_and_log :: {substitution, unification_log}
-  #@type constraint :: {goal, atom, list}
-  @type constraint_store :: any #list(constraint)
-  #@type domain :: list
-  @type domain_store :: any #HashDict.t
-  @type logic_term :: any # Should be all types allowed in substitution
-  #@type logic_term :: logic_variable | atom | float | integer | list(logic_term) | {logic_term, logic_term} | {logic_term, logic_term, logic_term}
-  
+
 ## ---------------------------------------------------------------------------------------------------
 ## miniKanren operators
   @spec eq(logic_term, logic_term) :: goal
@@ -267,7 +276,7 @@ defmodule MiniKanren do
   Returns an empty package with the given constraint solver.
   """
   def empty_package(solver \\ MiniKanren) when is_atom(solver) do
-    {HashDict.new(), solver.empty_constraint_store, solver.empty_domain_store, 0, solver}
+    {Map.new, solver.empty_constraint_store, solver.empty_domain_store, 0, solver}
   end
   
   @spec call_empty_package(goal, atom) :: goal_stream
@@ -566,7 +575,7 @@ defmodule MiniKanren do
   @spec walk(logic_term, substitution) :: logic_term
   @doc """
   """
-  def walk(x, subs = %HashDict{}) do
+  def walk(x, subs = %{}) do
     case var?(x) and Dict.get(subs, x, false) do
       false -> x
       val   -> walk(val, subs)
@@ -598,11 +607,11 @@ defmodule MiniKanren do
   Extends the substitution by relating the logic variable `x` with the term `v`,  unless doing so
   would create a circular relation.
   """
-  def extend_substitution(x, v, subs = %HashDict{}) do
+  def extend_substitution(x, v, subs = %{}) do
     if occurs_check(x, v, subs) do
       nil
     else
-      HashDict.put(subs, x, v)
+      Dict.put(subs, x, v)
     end
   end
   def extend_substitution(x, v, subs) when is_list(subs) do
@@ -620,11 +629,11 @@ defmodule MiniKanren do
   Extends the substitution `s` by relating the logic variable `x` with `v`,
   unless doing so creates a circular relation.
   """
-  def extend_substitution_logged(x, v, {subs = %HashDict{}, log}) do
+  def extend_substitution_logged(x, v, {subs = %{}, log}) do
     if occurs_check(x, v, subs) do
       nil
     else
-      {HashDict.put(subs, x, v), [{x, v} | log]}
+      {Dict.put(subs, x, v), [{x, v} | log]}
     end
   end
   def extend_substitution_logged(x, v, {subs, log}) when is_list(subs) do
@@ -1026,13 +1035,13 @@ defmodule MiniKanren.Functions do
   """
   def copy_term(u, v) do
     project([u]) do
-      eq(MK.walk_all(u, build_subs(u, HashDict.new)), v)
+      eq(MK.walk_all(u, build_subs(u, Map.new)), v)
     end
   end
   
   defp build_subs(u, subs) do
     case MK.var?(u) or u do
-      true    -> HashDict.put_new(subs, u, MK.var(make_ref))
+      true    -> Dict.put_new(subs, u, MK.var(make_ref))
       [h | t] -> build_subs(t, build_subs(h, subs))
       _       -> subs
     end

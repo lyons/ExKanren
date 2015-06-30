@@ -24,24 +24,27 @@ defmodule MiniKanren do
   end
   
   # Typespecs
-  @type package :: {dict_substitution, constraint_store, domain_store, non_neg_integer}
+  @type constraint_solver :: atom
+  @type package :: {dict_substitution, constraint_store, domain_store, non_neg_integer, constraint_solver}
   @type goal_stream :: :mzero | package | (() -> goal_stream) | nonempty_improper_list(package, (() -> goal_stream))
   @type goal :: (package -> goal_stream)
   @type logic_variable :: {non_neg_integer}
   @type logic_variable_set :: HashSet.t
   @type dict_substitution :: HashDict.t
-  @type list_substitution :: list({logic_variable, logic_value})
+  @type list_substitution :: list({logic_variable, logic_term})
   @type substitution :: dict_substitution | list_substitution
   @type unification_log :: list_substitution
   @type substitution_and_log :: {substitution, unification_log}
-  @type constraint :: {goal, atom, list}
-  @type constraint_store :: list(constraint)
-  @type domain :: list
-  @type domain_store :: HashDict.t
-  @type logic_value :: any # Should be all types allowed in substitution
+  #@type constraint :: {goal, atom, list}
+  @type constraint_store :: any #list(constraint)
+  #@type domain :: list
+  @type domain_store :: any #HashDict.t
+  @type logic_term :: any # Should be all types allowed in substitution
+  #@type logic_term :: logic_variable | atom | float | integer | list(logic_term) | {logic_term, logic_term} | {logic_term, logic_term, logic_term}
   
-  # miniKanren operators
-  @spec eq(logic_value, logic_value) :: goal
+## ---------------------------------------------------------------------------------------------------
+## miniKanren operators
+  @spec eq(logic_term, logic_term) :: goal
   @doc """
   `eq` is the basic goal constructor: it succeeds if its arguments unify, fails
   otherwise.
@@ -74,7 +77,7 @@ defmodule MiniKanren do
       case unify(u, v, subs) do
         nil -> mzero
         {^subs, []} -> unit(pkg)
-        {s, log}    -> solver.process_log(log, cons).({s, cons, doms, counter, solver})
+        {s, log}    -> solver.post_unify(log, cons).({s, cons, doms, counter, solver})
       end
     end
   end
@@ -106,8 +109,13 @@ defmodule MiniKanren do
       [{"First clause", 1, 2}, {"Third clause", 3, 3}]
   """
   defmacro conde([do: {:__block__, _, cases}]) do
-    seqs = Enum.map(cases, fn seq -> quote do: MK.bind_many!([pkg, unquote_splicing(seq)]) end)
-    quote do: fn pkg -> MK.mplus_many!(unquote(seqs)) end
+    seqs = Enum.map(cases, fn seq -> 
+                             case seq do
+                               [f1 | []] -> quote do: unquote(f1).(pkg)
+                               [f1 | fs] -> quote do: MK.bind_many!([unquote(f1).(pkg), unquote_splicing(fs)])
+                             end
+                           end)
+    quote do: fn pkg -> fn -> MK.mplus_many!(unquote(seqs)) end end
   end
   defmacro conde([do: single_case]) do
     call = {:__block__, [], [single_case]}
@@ -152,7 +160,39 @@ defmodule MiniKanren do
     quote do: unquote(func)
   end
   
-  # miniKanren interface
+  @doc """
+  Helper function for the `fresh` macro.
+  """
+  def expand_fresh(ls = [_ | _], do_block) do
+    length = Enum.count(ls) # Number of fresh variables, increment counter by this amount
+    seq = case do_block do
+      {:__block__, _, goals} -> goals
+      goal -> [goal]
+    end
+  
+    quote do
+      fn {subs, cons, doms, counter, solver} ->
+        fn unquote(ls) ->
+          MK.bind_many!([{subs, cons, doms, counter + unquote(length), solver}, unquote_splicing(seq)])
+        end.(MK.vars(counter, unquote(length)))
+      end
+    end
+  end
+  def expand_fresh([], do_block) do
+    seq = case do_block do
+      {:__block__, _, goals} -> goals
+      goal -> [goal]
+    end
+  
+    quote do
+      fn pkg ->
+        MK.bind_many!([pkg, unquote_splicing(seq)])
+      end
+    end
+  end
+  
+## ---------------------------------------------------------------------------------------------------
+## Interface operators
   @doc """
   `run` is similar to `run_all`, but returns at most `n` results.
   
@@ -222,7 +262,77 @@ defmodule MiniKanren do
     end
   end
   
-  # Impure operators
+  @spec empty_package(atom) :: package
+  @doc """
+  Returns an empty package with the given constraint solver.
+  """
+  def empty_package(solver \\ MiniKanren) when is_atom(solver) do
+    {HashDict.new(), solver.empty_constraint_store, solver.empty_domain_store, 0, solver}
+  end
+  
+  @spec call_empty_package(goal, atom) :: goal_stream
+  @doc """
+  Calls a goal function with an empty_package.
+  """
+  def call_empty_package(g, solver), do: g.(empty_package(solver))
+  
+  @spec take_all(goal_stream) :: list(package)
+  @doc """
+  Takes all values from the goal stream. May not terminate.
+  """
+  def take_all(s) do
+    case s do
+      :mzero  -> []
+      pkg when is_tuple(pkg)  -> [pkg]
+      f   when is_function(f) -> f.() |> take_all
+      [h | t] -> [h | take_all(t)]
+    end
+  end
+  
+  @spec take(non_neg_integer, goal_stream) :: list(package)
+  @doc """
+  Take n values from the goal stream. May not terminate.
+  """
+  def take(0, _), do: []
+  def take(n, s) do
+    case s do
+      :mzero  -> []
+      pkg when is_tuple(pkg)  -> [pkg]
+      f   when is_function(f) -> take(n, f.())
+      [h | t] -> [h | take(n - 1, t)]
+    end
+  end
+  
+  @doc """
+  Helper function for the `run` macro. Inserts a goal at the end of the run block to enforce
+  constraints with respect to the output variable.
+  """
+  def insert_enforce_constraints({:__block__, metadata, ls}) do
+    x = quote do
+      MK.enforce_constraints_goal(MK.var(0))
+    end
+    {:__block__, metadata, ls ++ [x]}
+  end
+  def insert_enforce_constraints(single_goal) do
+    x = quote do
+      MK.enforce_constraints_goal(MK.var(0))
+    end
+    {:__block__, [], [single_goal, x]}
+  end
+  
+  @doc """
+  Creates a goal that calls the solver's `enforce_constraints` method with respect to the given logic
+  variable.
+  """
+  def enforce_constraints_goal(var) do
+    fn pkg = {_, _, _, _, solver} ->
+      solver.enforce_constraints(var).(pkg)
+    end
+  end
+  
+## ---------------------------------------------------------------------------------------------------
+## Impure operators
+  
   @doc """
   `conda` accepts lists of goal clauses similar to `conde`, but returns the result
   of at most one clause: the first clause to have its first goal succeed.
@@ -246,11 +356,32 @@ defmodule MiniKanren do
       [h | t]  -> quote do: {unquote(h), MK.bind_many!(unquote(t))}
     end)
   
-    quote do: fn pkg -> MK._conda(unquote(seqs), pkg) end
+    quote do: fn pkg -> fn -> MK._conda(unquote(seqs), pkg) end end
   end
   defmacro conda([do: single_clause]) do
     call = {:__block__, [], [single_clause]}
     quote do: MK.conda(do: unquote(call))
+  end
+  
+  @spec _conda(list({goal, goal}), package) :: goal_stream
+  @doc """
+  Helper function for the `conda` macro.
+  """
+  def _conda([], _), do: :mzero
+  def _conda([{h, seq} | t], pkg) do
+    case __conda(h.(pkg), seq) do
+      :mzero -> _conda(t, pkg)
+      stream -> stream
+    end
+  end
+  
+  defp __conda(h, seq) do
+    case h do
+      :mzero -> :mzero
+      [_a | _f] -> bind(h, seq)
+      pkg when is_tuple(pkg) -> bind(pkg, seq)
+      f  when is_function(f) -> fn -> __conda(f.(), seq) end
+    end
   end
   
   @doc """
@@ -280,6 +411,27 @@ defmodule MiniKanren do
   defmacro condu([do: single_clause]) do
     call = {:__block__, [], [single_clause]}
     quote do: MK.condu(do: unquote(call))
+  end
+  
+  @spec _condu(list({goal, goal}), package) :: goal_stream
+  @doc """
+  Helper function for the `condu` macro.
+  """
+  def _condu([], _), do: :mzero
+  def _condu([{h, seq} | t], pkg) do
+    case __condu(h.(pkg), seq) do
+      :mzero -> _condu(t, pkg)
+      stream -> stream
+    end
+  end
+  
+  defp __condu(h, seq) do
+    case h do
+      :mzero -> :mzero
+      [a | _f] -> bind(unit(a), seq)
+      pkg when is_tuple(pkg) -> bind(pkg, seq)
+      f  when is_function(f) -> fn -> __condu(f.(), seq) end
+    end
   end
   
   @doc """
@@ -322,75 +474,33 @@ defmodule MiniKanren do
     end
   end
   
-  @spec conj_many([goal]) :: goal
-  @doc """
-  Returns the conjunction of a list of goals.
-  """
-  def conj_many(ls) when is_list(ls) do
-    fn pkg ->
-      bind_many([pkg | ls])
-    end
-  end
+## ---------------------------------------------------------------------------------------------------
+## Logic variables
   
-  # Wiring
-  @doc """
-  Helper function for the `run` macro. Inserts a goal to enforce constraints with
-  respect to the first logic variable at the end of the run block.
-  """
-  def insert_enforce_constraints({:__block__, metadata, ls}) do
-    x = quote do
-      MK.enforce_constraints_goal(MK.var(0))
-    end
-    {:__block__, metadata, ls ++ [x]}
-  end
-  def insert_enforce_constraints(single_goal) do
-    x = quote do
-      MK.enforce_constraints_goal(MK.var(0))
-    end
-    {:__block__, [], [single_goal, x]}
-  end
-  
-  @spec _conda(list({goal, goal}), package) :: goal_stream
-  @doc """
-  Helper function for the `conda` macro.
-  """
-  def _conda([], _), do: :mzero
-  def _conda([{h, seq} | t], pkg) do
-    case h.(pkg) do
-      :mzero -> _conda(t, pkg)
-      a      -> bind(a, seq)
-    end
-  end
-  
-  @spec _condu(list({goal, goal}), package) :: goal_stream
-  @doc """
-  Helper function for the `condu` macro.
-  """
-  def _condu([], _), do: :mzero
-  def _condu([{h, seq} | t], pkg) do
-    case h.(pkg) do
-      :mzero   -> _condu(t, pkg)
-      [a | _f] -> bind(unit(a), seq)
-      a        -> bind(a, seq)
-    end
-  end
-  
-  # Internal wiring
   @spec var(non_neg_integer | reference) :: logic_variable
   @doc """
-  Creates a new logic variable. Logic variables are represented as 1-tuples.
+  Creates a new logic variable.
+  
+  Logic variables are represented internally as 1-tuples of natural numbers or, in the case of
+  variables created by `copy_term`, as 1-tuples of Erlang references.
   """
   def var(c),  do: {c}
   
   @spec vars(non_neg_integer, pos_integer) :: nonempty_list(logic_variable)
+  @doc """
+  Creates of list of `n` logic variables numbered in sequence starting from `c`.
+  """
   def vars(c, n), do: Enum.map(c..(c + n - 1), &var/1)
   
   @spec var?(any) :: boolean
   @doc """
-  Checks whether the given argument is a logic variable.
+  Predicate that tests whether an item is a logic variable.
   """
   def var?({_}), do: true
   def var?(_),   do: false
+
+## ---------------------------------------------------------------------------------------------------
+## Stream operators
   
   @spec unit(package) :: package
   @doc """
@@ -407,7 +517,7 @@ defmodule MiniKanren do
   """
   def mplus(:mzero, s), do: s
   def mplus(s1, s2) when is_function(s1) do
-    fn -> mplus(s1.(), s2) end
+    fn -> mplus(s2.(), s1) end
   end
   def mplus(s1, s2) when is_tuple(s1), do: [s1 | s2]
   def mplus([h | t], s) do
@@ -424,174 +534,6 @@ defmodule MiniKanren do
   def bind(pkg, goal) when is_tuple(pkg), do: goal.(pkg)
   def bind([pkg | thunk], goal) do
     mplus(goal.(pkg), fn -> bind(thunk.(), goal) end)
-  end
-  
-  @spec walk(logic_value, substitution) :: logic_value
-  @doc """
-  """
-  def walk(x, subs = %HashDict{}) do
-    case var?(x) and Dict.get(subs, x, false) do
-      false -> x
-      val   -> walk(val, subs)
-    end
-  end
-  def walk(x, subs) when is_list(subs) do
-    case var?(x) and Association.get(subs, x) do
-      false -> x
-      val   -> walk(val, subs)
-    end
-  end
-  
-  @spec walk_all(logic_value, substitution) :: logic_value
-  @doc """
-  """
-  def walk_all(v, subs) do
-    case walk(v, subs) do
-      [h | t]   -> [walk_all(h, subs) | walk_all(t, subs)]
-      {a, b}    -> {walk_all(a, subs), walk_all(b, subs)}
-      {a, b, c} -> {walk_all(a, subs), walk_all(b, subs), walk_all(c, subs)}
-      val       -> val
-    end
-  end
-  
-  @spec extend_substitution(logic_variable,
-                            logic_value,
-                            substitution) :: substitution_and_log | nil
-  @doc """
-  Extends the substitution `s` by relating the logic variable `x` with `v`,
-  unless doing so creates a circular relation.
-  """
-  def extend_substitution(x, v, subs = %HashDict{}) do
-    if occurs_check(x, v, subs) do
-      nil
-    else
-      HashDict.put(subs, x, v)
-    end
-  end
-  def extend_substitution(x, v, subs) when is_list(subs) do
-    if occurs_check(x, v, subs) do
-      nil
-    else
-      Association.put(subs, x, v)
-    end
-  end
-  
-  @spec extend_substitution_logged(logic_variable,
-                                   logic_value,
-                                   substitution_and_log) :: substitution_and_log | nil
-  @doc """
-  Extends the substitution `s` by relating the logic variable `x` with `v`,
-  unless doing so creates a circular relation.
-  """
-  def extend_substitution_logged(x, v, {subs = %HashDict{}, log}) do
-    if occurs_check(x, v, subs) do
-      nil
-    else
-      {HashDict.put(subs, x, v), [{x, v} | log]}
-    end
-  end
-  def extend_substitution_logged(x, v, {subs, log}) when is_list(subs) do
-    if occurs_check(x, v, subs) do
-      nil
-    else
-      {Association.put(subs, x, v), [{x, v} | log]}
-    end
-  end
-  
-  @spec occurs_check(logic_value, logic_value, substitution) :: boolean
-  @doc """
-  Ensures relating `x` and `v` will not introduce a circular relation to the
-  substitution `s`.
-  """
-  def occurs_check(x, v, subs) do
-    v = walk(v, subs)
-    var_v? = var?(v)
-    occurs_check(x, v, var_v?, subs)
-  end
-  
-  @spec occurs_check(logic_value, logic_value, boolean, substitution) :: boolean
-  defp occurs_check(v, v, true, _), do: true
-  defp occurs_check(_, _, true, _), do: false
-  defp occurs_check(x, [h | t], _, s) do
-    occurs_check(x, h, s) or occurs_check(x, t, s)
-  end
-  defp occurs_check(x, {a, b}, _, s) do
-    occurs_check(x, a, s) or occurs_check(x, b, s)
-  end
-  defp occurs_check(x, {a, b, c}, _, s) do
-    occurs_check(x, a, s) or occurs_check(x, b, s) or occurs_check(x, c, s)
-  end
-  defp occurs_check(_, _, _, _), do: false
-  
-  @spec unify(logic_value, logic_value, substitution | substitution_and_log) :: substitution_and_log | nil
-  @doc """
-  """
-  def unify(t1, t2, s = {subs, _}) do
-    t1 = walk(t1, subs)
-    t2 = walk(t2, subs)
-    var_t1? = var?(t1)
-    var_t2? = var?(t2)
-    unify(t1, var_t1?, t2, var_t2?, s)
-  end
-  def unify(t1, t2, subs), do: unify(t1, t2, {subs, []})
-  
-  @spec unify(logic_value, boolean, logic_value, boolean, substitution_and_log) :: substitution_and_log | nil
-  defp unify(t, _, t, _, subs), do: subs
-  defp unify(t1, true, t2, _, subs), do: extend_substitution_logged(t1, t2, subs)
-  defp unify(t1, _, t2, true, subs), do: extend_substitution_logged(t2, t1, subs)
-  defp unify([h1 | t1], _, [h2 | t2], _, subs) do
-    case unify(h1, h2, subs) do
-      nil -> nil
-      x   -> unify(t1, t2, x)
-    end
-  end
-  defp unify({a1, b1}, _, {a2, b2}, _, subs) do
-    case unify(a1, a2, subs) do
-      nil -> nil
-      x   -> unify(b1, b2, x)
-    end
-  end
-  defp unify({a1, b1, c1}, _, {a2, b2, c2}, _, subs) do
-    case unify(a1, a2, subs) do
-      nil -> nil
-      x   -> case unify(b1, b2, x) do
-               nil -> nil
-               y   -> unify(c1, c2, y)
-             end
-    end
-  end
-  defp unify(_, _, _, _, _), do: nil
-  
-  # Goal constructor helpers
-  @doc """
-  Helper function for the `fresh` macro.
-  """
-  def expand_fresh(ls = [_ | _], do_block) do
-    length = Enum.count(ls)
-    seq = case do_block do
-      {:__block__, _, goals} -> goals
-      goal -> [goal]
-    end
-  
-    quote do
-      fn {subs, cons, doms, counter, solver} ->
-        fn unquote(ls) ->
-          MK.bind_many!([{subs, cons, doms, counter + unquote(length), solver}, unquote_splicing(seq)])
-        end.(MK.vars(counter, unquote(length)))
-      end
-    end
-  end
-  def expand_fresh([], do_block) do
-    seq = case do_block do
-      {:__block__, _, goals} -> goals
-      goal -> [goal]
-    end
-  
-    quote do
-      fn pkg ->
-        MK.bind_many!([pkg, unquote_splicing(seq)])
-      end
-    end
   end
   
   def mplus_many([f]), do: f
@@ -618,45 +560,160 @@ defmodule MiniKanren do
     quote do: MK.bind_many!([MK.bind(unquote(fun1), unquote(fun2)), unquote_splicing(t)])
   end
   
-  # Interface helpers
-  @spec empty_package(atom) :: package
-  @doc """
-  Returns an empty package with the given constraint solver.
-  """
-  def empty_package(solver \\ MiniKanren), do: {HashDict.new(), [], HashDict.new(), 0, solver}
+## ---------------------------------------------------------------------------------------------------
+## Substitutions
   
-  @spec call_empty_package(goal, atom) :: goal_stream
+  @spec walk(logic_term, substitution) :: logic_term
   @doc """
-  Calls a goal function with an empty_package.
   """
-  def call_empty_package(g, solver), do: g.(empty_package(solver))
-  
-  @spec take_all(goal_stream) :: list(package)
-  @doc """
-  Takes all values from the goal stream. May not terminate.
-  """
-  def take_all(s) do
-    case s do
-      :mzero  -> []
-      pkg when is_tuple(pkg)  -> [pkg]
-      f   when is_function(f) -> f.() |> take_all
-      [h | t] -> [h | take_all(t)]
+  def walk(x, subs = %HashDict{}) do
+    case var?(x) and Dict.get(subs, x, false) do
+      false -> x
+      val   -> walk(val, subs)
+    end
+  end
+  def walk(x, subs) when is_list(subs) do
+    case var?(x) and Association.get(subs, x) do
+      false -> x
+      val   -> walk(val, subs)
     end
   end
   
-  @spec take(non_neg_integer, goal_stream) :: list(package)
+  @spec walk_all(logic_term, substitution) :: logic_term
   @doc """
-  Take n values from the goal stream. May not terminate.
   """
-  def take(0, _), do: []
-  def take(n, s) do
-    case s do
-      :mzero  -> []
-      pkg when is_tuple(pkg)  -> [pkg]
-      f   when is_function(f) -> take(n, f.())
-      [h | t] -> [h | take(n - 1, t)]
+  def walk_all(v, subs) do
+    case walk(v, subs) do
+      [h | t]   -> [walk_all(h, subs) | walk_all(t, subs)]
+      {a, b}    -> {walk_all(a, subs), walk_all(b, subs)}
+      {a, b, c} -> {walk_all(a, subs), walk_all(b, subs), walk_all(c, subs)}
+      val       -> val
     end
   end
+  
+  @spec extend_substitution(logic_variable,
+                            logic_term,
+                            substitution) :: substitution_and_log | nil
+  @doc """
+  Extends the substitution by relating the logic variable `x` with the term `v`,  unless doing so
+  would create a circular relation.
+  """
+  def extend_substitution(x, v, subs = %HashDict{}) do
+    if occurs_check(x, v, subs) do
+      nil
+    else
+      HashDict.put(subs, x, v)
+    end
+  end
+  def extend_substitution(x, v, subs) when is_list(subs) do
+    if occurs_check(x, v, subs) do
+      nil
+    else
+      Association.put(subs, x, v)
+    end
+  end
+  
+  @spec extend_substitution_logged(logic_variable,
+                                   logic_term,
+                                   substitution_and_log) :: substitution_and_log | nil
+  @doc """
+  Extends the substitution `s` by relating the logic variable `x` with `v`,
+  unless doing so creates a circular relation.
+  """
+  def extend_substitution_logged(x, v, {subs = %HashDict{}, log}) do
+    if occurs_check(x, v, subs) do
+      nil
+    else
+      {HashDict.put(subs, x, v), [{x, v} | log]}
+    end
+  end
+  def extend_substitution_logged(x, v, {subs, log}) when is_list(subs) do
+    if occurs_check(x, v, subs) do
+      nil
+    else
+      {Association.put(subs, x, v), [{x, v} | log]}
+    end
+  end
+  
+  @spec occurs_check(logic_variable, logic_term, substitution) :: boolean
+  @doc """
+  Ensures relating `x` and `v` will not introduce a circular relation to the substitution.
+  """
+  def occurs_check(x, v, subs) do
+    v = walk(v, subs)
+    var_v? = var?(v)
+    occurs_check(x, v, var_v?, subs)
+  end
+  
+  @spec occurs_check(logic_variable, logic_term, boolean, substitution) :: boolean
+  defp occurs_check(v, v, true, _), do: true
+  defp occurs_check(_, _, true, _), do: false
+  defp occurs_check(x, [h | t], _, s) do
+    occurs_check(x, h, s) or occurs_check(x, t, s)
+  end
+  defp occurs_check(x, {a, b}, _, s) do
+    occurs_check(x, a, s) or occurs_check(x, b, s)
+  end
+  defp occurs_check(x, {a, b, c}, _, s) do
+    occurs_check(x, a, s) or occurs_check(x, b, s) or occurs_check(x, c, s)
+  end
+  defp occurs_check(_, _, _, _), do: false
+  
+## ---------------------------------------------------------------------------------------------------
+## Unification
+  
+  @spec unify(logic_term, logic_term, substitution | substitution_and_log) :: substitution_and_log | nil
+  @doc """
+  """
+  def unify(t1, t2, s = {subs, _}) do
+    t1 = walk(t1, subs)
+    t2 = walk(t2, subs)
+    var_t1? = var?(t1)
+    var_t2? = var?(t2)
+    unify(t1, var_t1?, t2, var_t2?, s)
+  end
+  def unify(t1, t2, subs), do: unify(t1, t2, {subs, []})
+  
+  @spec unify(logic_term, boolean, logic_term, boolean, substitution_and_log) :: substitution_and_log | nil
+  defp unify(t, _, t, _, subs), do: subs
+  defp unify(t1, true, t2, _, subs), do: extend_substitution_logged(t1, t2, subs)
+  defp unify(t1, _, t2, true, subs), do: extend_substitution_logged(t2, t1, subs)
+  defp unify([h1 | t1], _, [h2 | t2], _, subs) do
+    case unify(h1, h2, subs) do
+      nil -> nil
+      x   -> unify(t1, t2, x)
+    end
+  end
+  defp unify({a1, b1}, _, {a2, b2}, _, subs) do
+    case unify(a1, a2, subs) do
+      nil -> nil
+      x   -> unify(b1, b2, x)
+    end
+  end
+  defp unify({a1, b1, c1}, _, {a2, b2, c2}, _, subs) do
+    case unify(a1, a2, subs) do
+      nil -> nil
+      x   -> case unify(b1, b2, x) do
+               nil -> nil
+               y   -> unify(c1, c2, y)
+             end
+    end
+  end
+  defp unify(_, _, _, _, _), do: nil
+  
+  @spec unify_list(list_substitution,
+                   substitution | substitution_and_log) :: substitution_and_log
+  def unify_list([], subs = {_, _}), do: subs
+  def unify_list([], subs), do: {subs, []}
+  def unify_list([{u, v} | t], subs) do
+    case unify(u, v, subs) do
+      nil -> nil
+      s   -> unify_list(t, s)
+    end
+  end
+   
+## ---------------------------------------------------------------------------------------------------
+## Reification
   
   @spec reify([package]) :: [any]
   @doc """
@@ -670,19 +727,16 @@ defmodule MiniKanren do
   @doc """
   Reifies a package with respect to a given logic variable.
   """
-  def reify_pkg(pkg = {subs, cons, _, _, solver}, logic_var) do
+  def reify_pkg(pkg = {subs, _, _, _, solver}, logic_var) do
     v = walk_all(logic_var, subs)
     case reify_s(v, []) do
       [] -> unit(v)            # v contains no fresh variables
       r  -> v = walk_all(v, r) # replace fresh variables with reified names
-            case cons do
-              [] -> unit(v)
-              _  -> solver.reify_constraints(v, r).(pkg)
-            end
+            solver.reify_constraints(v, r).(pkg)
     end
   end
   
-  @spec reify_s(logic_value, list_substitution) :: list_substitution
+  @spec reify_s(logic_term, list_substitution) :: list_substitution
   @doc """
   Builds a substitution mapping all fresh variables in the result term to their
   reified names.
@@ -693,7 +747,7 @@ defmodule MiniKanren do
     reify_s(v, var_v?, subs)
   end
   
-  @spec reify_s(logic_value, boolean, list_substitution) :: list_substitution
+  @spec reify_s(logic_term, boolean, list_substitution) :: list_substitution
   defp reify_s(var, true, subs) do
     name = Enum.count(subs) |> reify_name()
     Association.put(subs, var, name)
@@ -708,29 +762,19 @@ defmodule MiniKanren do
   @spec reify_name(non_neg_integer) :: atom
   def reify_name(n), do: :"_#{n}"
   
-  # Currently using the process dictionary to store the three hooks needed for CLP
-  # Perhaps a pure way of doing this? Store them in the package or something?
-#  def process_log do
-#    Process.get(:process_log, &MiniKanren.process_log_stub/2)
-#  end
-#  def enforce_constraints do
-#    Process.get(:enforce_constraints, &MiniKanren.enforce_constraints_stub/1)
-#  end
-#  def reify_constraints do
-#    Process.get(:reify_constraints, &MiniKanren.reify_constraints_stub/2)
-#  end
+## ---------------------------------------------------------------------------------------------------
+## Solver callbacks  
   
-  def enforce_constraints_goal(var) do
-    fn pkg = {_, _, _, _, solver} ->
-      solver.enforce_constraints(var).(pkg)
-    end
-  end
+  def post_unify(_, _),         do: &MiniKanren.unit/1
+  def enforce_constraints(_),   do: &MiniKanren.unit/1
+  def reify_constraints(v, _),  do: fn _ -> v end
+  def empty_constraint_store(), do: nil
+  def empty_domain_store(),     do: nil
   
-  def process_log(_, _),       do: &MiniKanren.unit/1
-  def enforce_constraints(_),  do: &MiniKanren.unit/1
-  def reify_constraints(_, _), do: &MiniKanren.unit/1
-  
-  # CLP stuff
+## ---------------------------------------------------------------------------------------------------
+## CLP junk
+  @type constraint :: any
+  @type domain :: any
   @spec constraint(goal, atom, list_substitution) :: constraint
   def constraint(goal, rator, rands), do: {goal, rator, rands}
   
@@ -800,17 +844,6 @@ defmodule MiniKanren do
     case unify_list(log, subs) do
       {^subs, _} -> true
       _          -> false
-    end
-  end
-  
-  @spec unify_list(list_substitution,
-                   substitution | substitution_and_log) :: substitution_and_log
-  def unify_list([], subs = {_, _}), do: subs
-  def unify_list([], subs), do: {subs, []}
-  def unify_list([{u, v} | t], subs) do
-    case unify(u, v, subs) do
-      nil -> nil
-      s   -> unify_list(t, s)
     end
   end
   

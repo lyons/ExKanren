@@ -25,7 +25,7 @@ defmodule MiniKanren do
   @type logic_variable :: {non_neg_integer}
   @type logic_variable_set :: HashSet.t
   @type logic_term :: any
-#   This seems to confuse the dialyzer in an impressive way
+## This seems to confuse the dialyzer in an impressive way
 #  @type logic_term :: logic_variable
 #                      | atom
 #                      | float

@@ -253,16 +253,14 @@ defmodule MiniKanren.CLP.Tree do
       fn pkg = {subs, _cons = {d, a, t}, doms, counter, solver} ->
         x = walk(u, subs)
         case var?(x) do
-          true ->
-            case make_tag_A_plus(x, tag, predicate, subs, d, a, t) do
-              false -> mzero
-              cons  -> unit({subs, cons, doms, counter, solver})
-            end
-          false ->
-            case predicate.(x) do
-              true  -> unit(pkg)
-              false -> mzero
-            end
+          true -> case make_tag_A_plus(x, tag, predicate, subs, d, a, t) do
+                    false -> mzero
+                    cons  -> unit({subs, cons, doms, counter, solver})
+                  end
+          false -> case predicate.(x) do
+                     true  -> unit(pkg)
+                     false -> mzero
+                   end
         end
       end
     end

@@ -29,7 +29,8 @@ defmodule MiniKanren.CLP.FD do
   # f -> function
   
   alias  MiniKanren, as: MK
-  import MiniKanren, except: [post_unify: 2, enforce_constraints: 1, reify_constraints: 2]
+  import MiniKanren, except: [post_unify: 2, enforce_constraints: 1, reify_constraints: 2,
+                              empty_constraint_store: 0, empty_domain_store: 0]
   import MiniKanren.Functions, only: [succeed: 0, onceo: 1]
   
   defmacro __using__(_) do
@@ -331,8 +332,8 @@ defmodule MiniKanren.CLP.FD do
     exclude_from_d(make_d(ns), doms, xs).(pkg)
   end
   
-# CLP Hooks -----------------------------------------------------------------------------------------
-    @spec post_unify(MK.unification_log, MK.constraint_store) :: MK.goal
+# Solver callbacks -----------------------------------------------------------------------------------
+  @spec post_unify(MK.unification_log, MK.constraint_store) :: MK.goal
   def post_unify([{x, v} | t], cons) do
     t = compose_m(run_constraints(Enum.into([x], HashSet.new), cons),
                   post_unify(t, cons))

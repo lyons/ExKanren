@@ -38,9 +38,9 @@ defmodule MiniKanren.CLP.Tree do
   @typep disequality_constraint :: MK.list_substitution
   @typep disequality_store :: list(disequality_constraint)
   @typep type_constraint :: {atom, predicate}
-  @typep type_store :: map(MK.logic_variable, type_constraint)
+  @typep type_store :: %{MK.logic_variable => type_constraint}
   @typep absento_constraint :: atom
-  @typep absento_store :: map(MK.logic_variable, list(absento_constraint))
+  @typep absento_store :: %{MK.logic_variable => list(absento_constraint)}
   @typep constraint_store :: {disequality_store, type_store, absento_store}
   
 ## ---------------------------------------------------------------------------------------------------

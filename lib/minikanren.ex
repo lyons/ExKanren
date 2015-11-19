@@ -608,17 +608,15 @@ defmodule MiniKanren do
   would create a circular relation.
   """
   def extend_substitution(x, v, subs = %{}) do
-    if occurs_check(x, v, subs) do
-      nil
-    else
-      Dict.put(subs, x, v)
+    case occurs_check(x, v, subs) do
+      true  -> nil
+      false -> Dict.put(subs, x, v)
     end
   end
   def extend_substitution(x, v, subs) when is_list(subs) do
-    if occurs_check(x, v, subs) do
-      nil
-    else
-      Association.put(subs, x, v)
+    case occurs_check(x, v, subs) do
+      true  -> nil
+      false -> Association.put(subs, x, v)
     end
   end
   
@@ -630,17 +628,15 @@ defmodule MiniKanren do
   unless doing so creates a circular relation.
   """
   def extend_substitution_logged(x, v, {subs = %{}, log}) do
-    if occurs_check(x, v, subs) do
-      nil
-    else
-      {Dict.put(subs, x, v), [{x, v} | log]}
+    case occurs_check(x, v, subs) do
+      true  -> nil
+      false -> {Dict.put(subs, x, v), [{x, v} | log]}
     end
   end
   def extend_substitution_logged(x, v, {subs, log}) when is_list(subs) do
-    if occurs_check(x, v, subs) do
-      nil
-    else
-      {Association.put(subs, x, v), [{x, v} | log]}
+    case occurs_check(x, v, subs) do
+      true  -> nil
+      false -> {Association.put(subs, x, v), [{x, v} | log]}
     end
   end
   

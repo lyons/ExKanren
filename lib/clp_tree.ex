@@ -677,7 +677,7 @@ defmodule MiniKanren.CLP.Tree do
 ## Owlcats
   
   @spec tag_eq?(atom, atom) :: boolean
-  #            
+  #            ʌ⏜ʌ
   defp tag_eq?(o,o), do: true
   defp tag_eq?(_,_), do: false
   

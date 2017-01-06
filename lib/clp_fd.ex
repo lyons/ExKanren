@@ -335,7 +335,7 @@ defmodule MiniKanren.CLP.FD do
 # Solver callbacks -----------------------------------------------------------------------------------
   @spec post_unify(MK.unification_log, MK.constraint_store) :: MK.goal
   def post_unify([{x, v} | t], cons) do
-    t = compose_m(run_constraints(Enum.into([x], HashSet.new), cons),
+    t = compose_m(run_constraints(Enum.into([x], MapSet.new()), cons),
                   post_unify(t, cons))
     fn pkg = {_, _, doms, _, _} ->
       case get_d(x, doms) do
@@ -404,7 +404,7 @@ defmodule MiniKanren.CLP.FD do
   end
   
   def empty_constraint_store(), do: []
-  def empty_domain_store(), do: HashDict.new
+  def empty_domain_store(), do: Map.new()
   
 # Wiring --------------------------------------------------------------------------------------------
   @spec process_d(MK.logic_value, MK.domain) :: MK.goal
@@ -438,7 +438,7 @@ defmodule MiniKanren.CLP.FD do
   def resolve_storable_d(d, x) do
     fn _pkg = {subs, cons, doms, counter, solver} ->
       case d do
-        [n] -> var_set = Enum.into([x], HashSet.new())
+        [n] -> var_set = Enum.into([x], MapSet.new())
                extended_pkg = {extend_substitution(x, n, subs), cons, doms, counter, solver}
                run_constraints(var_set, cons).(extended_pkg)
         _   -> {subs, cons, extend_domains(x, d, doms), counter, solver}
@@ -465,7 +465,7 @@ defmodule MiniKanren.CLP.FD do
 #  def get_d(x, [{x, d} | _]), do: d
 #  def get_d(x, [{_, _} | t]), do: get_d(x, t)
 #  def get_d(_, []), do: false
-  def get_d(x, doms), do: HashDict.get(doms, x, false)
+  def get_d(x, doms), do: Map.get(doms, x, false)
   
   @spec value_d?(MK.logic_value) :: boolean
   @doc """
@@ -734,7 +734,7 @@ defmodule MiniKanren.CLP.FD do
   def constraint_operands({_, _, rands}), do: rands
   
   def run_constraints(_, []) do
-    fn :mzero -> mzero
+    fn :mzero -> mzero()
        x  -> unit(x)
     end
   end
@@ -757,7 +757,7 @@ defmodule MiniKanren.CLP.FD do
     any_relevant_var?(c, vars)
   end
   def any_relevant_var?(x, vars) do
-    var?(x) and HashSet.member?(vars, x)
+    var?(x) and MapSet.member?(vars, x)
   end
   
   def remove_and_run(c) do
@@ -769,5 +769,5 @@ defmodule MiniKanren.CLP.FD do
     end
   end
   
-  def extend_domains(x, d, doms), do: HashDict.put(doms, x, d)
+  def extend_domains(x, d, doms), do: Map.put(doms, x, d)
 end

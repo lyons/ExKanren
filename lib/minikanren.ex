@@ -45,9 +45,9 @@ defmodule MiniKanren do
                        | (() -> goal_stream)
                        | nonempty_improper_list(package, (() -> goal_stream))
   
-  @type dict_substitution :: %{logic_variable => logic_term}
+  @type map_substitution :: %{logic_variable => logic_term}
   @type list_substitution :: list({logic_variable, logic_term})
-  @type substitution :: dict_substitution | list_substitution
+  @type substitution :: map_substitution | list_substitution
   @type unification_log :: list_substitution
   @type substitution_and_log :: {substitution, unification_log}
 
@@ -84,7 +84,7 @@ defmodule MiniKanren do
   def eq(u, v) do
     fn pkg = {subs, cons, doms, counter, solver} ->
       case unify(u, v, subs) do
-        nil -> mzero
+        nil -> mzero()
         {^subs, []} -> unit(pkg)
         {s, log}    -> solver.post_unify(log, cons).({s, cons, doms, counter, solver})
       end
@@ -467,7 +467,6 @@ defmodule MiniKanren do
       ...>   eq(x, 3)
       ...> end
       ** (ArithmeticError) bad argument in arithmetic expression
-      :erlang.+({1}, {1})
   """
   defmacro project([], [do: _]), do: raise("No variables given to project")
   defmacro project(vars, [do: do_block]) do
@@ -519,7 +518,7 @@ defmodule MiniKanren do
   @spec mzero() :: :mzero
   @doc """
   """
-  def mzero, do: :mzero
+  def mzero(), do: :mzero
   
   @spec mplus(goal_stream, (() -> goal_stream)) :: goal_stream
   @doc """
@@ -536,7 +535,7 @@ defmodule MiniKanren do
   @spec bind(goal_stream, goal) :: goal_stream
   @doc """
   """
-  def bind(:mzero, _), do: mzero
+  def bind(:mzero, _), do: mzero()
   def bind(thunk, goal) when is_function(thunk) do
     fn -> bind(thunk.(), goal) end
   end
@@ -576,7 +575,7 @@ defmodule MiniKanren do
   @doc """
   """
   def walk(x, subs = %{}) do
-    case var?(x) and Dict.get(subs, x, false) do
+    case var?(x) and Map.get(subs, x, false) do
       false -> x
       val   -> walk(val, subs)
     end
@@ -610,7 +609,7 @@ defmodule MiniKanren do
   def extend_substitution(x, v, subs = %{}) do
     case occurs_check(x, v, subs) do
       true  -> nil
-      false -> Dict.put(subs, x, v)
+      false -> Map.put(subs, x, v)
     end
   end
   def extend_substitution(x, v, subs) when is_list(subs) do
@@ -630,7 +629,7 @@ defmodule MiniKanren do
   def extend_substitution_logged(x, v, {subs = %{}, log}) do
     case occurs_check(x, v, subs) do
       true  -> nil
-      false -> {Dict.put(subs, x, v), [{x, v} | log]}
+      false -> {Map.put(subs, x, v), [{x, v} | log]}
     end
   end
   def extend_substitution_logged(x, v, {subs, log}) when is_list(subs) do
@@ -793,7 +792,7 @@ defmodule MiniKanren.Functions do
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   eq(x, 1)
-      ...>   succeed
+      ...>   succeed()
       ...> end
       [1]
   """
@@ -807,7 +806,7 @@ defmodule MiniKanren.Functions do
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   eq(x, 1)
-      ...>   succeed(fail)
+      ...>   succeed(fail())
       ...> end
       [1]
   """
@@ -821,11 +820,11 @@ defmodule MiniKanren.Functions do
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   eq(x, 1)
-      ...>   fail
+      ...>   fail()
       ...> end
       []
   """
-  def fail, do: fn _ -> MK.mzero end
+  def fail, do: fn _ -> MK.mzero() end
   
   @doc """
   `fail` is a goal that ignores its argument and always fails.
@@ -835,11 +834,11 @@ defmodule MiniKanren.Functions do
       iex> use MiniKanren
       iex> run_all([x]) do
       ...>   eq(x, 1)
-      ...>   fail(succeed)
+      ...>   fail(succeed())
       ...> end
       []
   """
-  def fail(_), do: fn _ -> MK.mzero end
+  def fail(_), do: fn _ -> MK.mzero() end
   
   @doc """
   `heado` relates `h` as the head of list `ls`.
@@ -1037,7 +1036,7 @@ defmodule MiniKanren.Functions do
   
   defp build_subs(u, subs) do
     case MK.var?(u) or u do
-      true    -> Dict.put_new(subs, u, MK.var(make_ref))
+      true    -> Map.put_new(subs, u, MK.var(make_ref()))
       [h | t] -> build_subs(t, build_subs(h, subs))
       _       -> subs
     end
@@ -1084,7 +1083,7 @@ defmodule MiniKanren.Functions do
   def fresho(v) do
     fn pkg = {subs, _, _, _, _} ->
       case MK.var?(MK.walk(v, subs)) do
-        false -> MK.mzero
+        false -> MK.mzero()
         _     -> MK.unit(pkg)
       end
     end
@@ -1113,7 +1112,7 @@ defmodule MiniKanren.Functions do
     fn pkg = {subs, _, _, _, _} ->
       case MK.var?(MK.walk(v, subs)) do
         false -> MK.unit(pkg)
-        _     -> MK.mzero
+        _     -> MK.mzero()
       end
     end
   end

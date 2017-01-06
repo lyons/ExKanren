@@ -20,7 +20,7 @@ defmodule MicroKanren do
   def eq(u, v) do
     fn {subs, counter} ->
       case unify(u, v, subs) do
-        nil -> mzero
+        nil -> mzero()
         s   -> unit({s, counter})
       end
     end
@@ -71,7 +71,7 @@ defmodule MicroKanren do
 
   # Interface helpers
   def empty_state, do: {Map.new, 0}
-  def call_empty_state(g), do: g.(empty_state)
+  def call_empty_state(g), do: g.(empty_state())
   
   def pull(s) when is_function(s), do: pull(s.())
   def pull(s), do: s
@@ -113,7 +113,7 @@ defmodule MicroKanren do
   
   @doc """
   """
-  def mzero, do: []
+  def mzero(), do: []
   
   @doc """
   """
@@ -127,7 +127,7 @@ defmodule MicroKanren do
   
   @doc """
   """
-  def bind([], _), do: mzero
+  def bind([], _), do: mzero()
   def bind(s, g) when is_function(s) do
     fn -> bind(s.(), g) end
   end
@@ -138,7 +138,7 @@ defmodule MicroKanren do
   @doc """
   """
   def walk(u, s) do
-    case var?(u) and Dict.get(s, u, false) do
+    case var?(u) and Map.get(s, u, false) do
       false -> u
       val -> walk(val, s)
     end
@@ -147,7 +147,7 @@ defmodule MicroKanren do
   @doc """
   """
   def ext_s(x, v, s) do
-    Dict.put(s, x, v)
+    Map.put(s, x, v)
   end
   
   @doc """

@@ -70,48 +70,48 @@ defmodule PrimerTest do
   end
 
   test "*off article* succeed & fail" do
-    assert [_] = ( run_all [_q], do: succeed )
-    assert ( run_all [_q], do: fail ) == []
-    assert ( run_all [_q], do: ( fail; succeed ) ) == []
-    assert ( run_all [_q], do: ( succeed; fail ) ) == []
+    assert [_] = ( run_all [_q], do: succeed() )
+    assert ( run_all [_q], do: fail() ) == []
+    assert ( run_all [_q], do: ( fail(); succeed() ) ) == []
+    assert ( run_all [_q], do: ( succeed(); fail() ) ) == []
   end
 
   test "section: The final operator, conde" do
     assert [_] = ( run_all [_q] do
       conde do
-        [succeed]
+        [succeed()]
       end
     end )
 
     assert [_] = ( run_all [_q] do
       conde do
-        [succeed, succeed, succeed, succeed]
+        [succeed(), succeed(), succeed(), succeed()]
       end
     end )
 
     assert [] == ( run_all [_q] do
       conde do
-        [succeed, succeed, fail, succeed]
+        [succeed(), succeed(), fail(), succeed()]
       end
     end )
 
     assert [_,_] = ( run_all [_q] do
       conde do
-        [succeed]
-        [succeed]
+        [succeed()]
+        [succeed()]
       end
     end )
 
     assert [_] = ( run_all [_q] do
       conde do
-        [succeed]
-        [fail]
+        [succeed()]
+        [fail()]
       end
     end )
 
     assert ( run_all [q] do
       conde do
-        [succeed, eq(q,1)]
+        [succeed(), eq(q,1)]
       end
     end ) == [1]
 

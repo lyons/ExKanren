@@ -17,7 +17,7 @@ defmodule MKImpureTest do
   test "conda doesn't blow up when no clauses succeed" do
     run_all([_x]) do
       conda do
-        [fail]
+        [fail()]
       end
     end
   end
@@ -37,7 +37,7 @@ defmodule MKImpureTest do
   test "condu doesn't blow up when no clauses succeed" do
     run_all([_x]) do
       condu do
-        [fail]
+        [fail()]
       end
     end
   end

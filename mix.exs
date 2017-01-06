@@ -4,8 +4,8 @@ defmodule ExKanren.Mixfile do
   def project do
     [ app: :exKanren,
       version: "0.0.3-dev",
-      elixir: "~> 0.14.2 or ~> 0.15.0 or ~> 1.0.0 or ~> 1.1.0",
-      deps: deps ]
+      elixir: "~> 1.3 or ~> 1.4",
+      deps: deps() ]
   end
 
   # Configuration for the OTP application

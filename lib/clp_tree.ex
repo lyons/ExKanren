@@ -72,7 +72,7 @@ defmodule MiniKanren.CLP.Tree do
     fn pkg = {subs, _cons = {d, a, t}, doms, counter, solver} ->
       case unify(u, v, subs) do
         nil          -> unit(pkg)
-        {^subs, []}  -> mzero
+        {^subs, []}  -> mzero()
         {_, log}     ->
           d = post_unify_neq(log, d, a, t)
           unit({subs, {d, a, t}, doms, counter, solver})
@@ -184,10 +184,10 @@ defmodule MiniKanren.CLP.Tree do
         fn _pkg = {subs, _cons = {d, a, t}, doms, counter, solver} ->
           case absento_plus(u, tag, subs, d, a, t) do
             cons = {_d, _a, _t} -> unit({subs, cons, doms, counter, solver})
-            false -> mzero
+            false -> mzero()
           end
         end
-      false -> fn _ -> mzero end
+      false -> fn _ -> mzero() end
     end
   end
 
@@ -199,7 +199,7 @@ defmodule MiniKanren.CLP.Tree do
     fn _pkg = {subs, _cons = {d, a, t}, doms, counter, solver} ->
       case verify_constraints(subs, d, a, t, log) do
         cons = {_d, _a, _t} -> unit({subs, cons, doms, counter, solver})
-        false -> mzero
+        false -> mzero()
       end
     end
   end
@@ -254,12 +254,12 @@ defmodule MiniKanren.CLP.Tree do
         x = walk(u, subs)
         case var?(x) do
           true -> case make_tag_A_plus(x, tag, predicate, subs, d, a, t) do
-                    false -> mzero
+                    false -> mzero()
                     cons  -> unit({subs, cons, doms, counter, solver})
                   end
           false -> case predicate.(x) do
                      true  -> unit(pkg)
-                     false -> mzero
+                     false -> mzero()
                    end
         end
       end
@@ -277,7 +277,7 @@ defmodule MiniKanren.CLP.Tree do
     case ext_A?(x, tag, a) do
       :ok ->
         a_plus = {tag, pred}
-        a = Dict.put(a, x, a_plus)
+        a = Map.put(a, x, a_plus)
         d = subsume(x, a_plus, d)
         {d, t} = update_D_T(x, subs, d, a, t)
         {d, a, t}
@@ -294,7 +294,7 @@ defmodule MiniKanren.CLP.Tree do
   constrained with the same tag, no action is required. Otherwise, returns ok to extend constraints.
   """
   defp ext_A?(x, tag, a) do
-    case Dict.get(a, x) do
+    case Map.get(a, x) do
       nil        -> :ok
       {a_tag, _} -> case tag_eq?(tag, a_tag) do
                       true  -> :no_action
@@ -371,10 +371,10 @@ defmodule MiniKanren.CLP.Tree do
   Extends the absento store with a new constraint on `x`, unless the constraint already exists on `x`
   """
   defp ext_T(x, tag, t) do
-    case Dict.get(t, x) do
-      nil  -> Dict.put(t, x, [tag])
+    case Map.get(t, x) do
+      nil  -> Map.put(t, x, [tag])
       list -> case Enum.member?(list, tag) do
-                 false -> Dict.update(t, x, [tag], fn ls -> [tag | ls] end)
+                 false -> Map.update(t, x, [tag], fn ls -> [tag | ls] end)
                  true  -> t
                end
     end
@@ -429,7 +429,7 @@ defmodule MiniKanren.CLP.Tree do
     subsumed_pr? = fn {u, v} ->
       case var?(v) do
         true  -> false
-        false -> case Dict.get(a, u) do
+        false -> case Map.get(a, u) do
                    nil -> false
                    {_, pred} -> not pred.(v)
                  end
@@ -450,7 +450,7 @@ defmodule MiniKanren.CLP.Tree do
     subsumed_pr? = fn {u, v} ->
       case var?(v) do
         true  -> false
-        false -> case Dict.get(t, u) do
+        false -> case Map.get(t, u) do
                    nil  -> false
                    cons -> Enum.any?(cons, fn tag -> tag?(v) and tag_eq?(tag, v) end)
                  end
@@ -520,18 +520,18 @@ defmodule MiniKanren.CLP.Tree do
   """
   defp verify_A(a, subs, [s = {u, v} | tail], deferred) do
     case var?(v) do
-      true  -> case Dict.get(a, u) do
+      true  -> case Map.get(a, u) do
                  {tag, pred} ->
                    walked_v = walk(v, subs)
-                   case var?(walked_v) and Dict.get(a, walked_v) do
-                     {^tag, _pred} -> Dict.delete(a, u) |> verify_A(subs, tail, deferred)
+                   case var?(walked_v) and Map.get(a, walked_v) do
+                     {^tag, _pred} -> Map.delete(a, u) |> verify_A(subs, tail, deferred)
                      {_, _} -> false
-                     nil    -> Dict.delete(a, u)
-                               |> Dict.put(v, {tag, pred})
+                     nil    -> Map.delete(a, u)
+                               |> Map.put(v, {tag, pred})
                                |> verify_A(subs, tail, deferred)
                      false  -> case pred.(v) do
                                  false -> false
-                                 true  -> Dict.delete(a, u) |> verify_A(subs, tail, deferred)
+                                 true  -> Map.delete(a, u) |> verify_A(subs, tail, deferred)
                                end
                    end
                  nil -> verify_A(a, subs, tail, deferred)
@@ -546,10 +546,10 @@ defmodule MiniKanren.CLP.Tree do
     # Do we really need to defer these constraints?
     # Can the unifier do something weird here on complex terms and mess us up?
     # I reasoned out this section of code rather late at night and can't remember why.
-    case Dict.get(a, u) do
+    case Map.get(a, u) do
       {_tag, pred} -> case pred.(v) do
                         false -> false
-                        true  -> Dict.delete(a, u) |> verify_A(subs, [], tail)
+                        true  -> Map.delete(a, u) |> verify_A(subs, [], tail)
                       end
       nil -> verify_A(a, subs, [], tail)
     end
@@ -573,9 +573,9 @@ defmodule MiniKanren.CLP.Tree do
         - If v walks to a container type, we reapply these rules to all elements of the container
   """
   defp verify_T(t, subs, _log = [{u, v} | tail]) do
-    case Dict.get(t, u) do
+    case Map.get(t, u) do
       nil  -> verify_T(t, subs, tail)
-      cons -> t = Dict.delete(t, u)
+      cons -> t = Map.delete(t, u)
               case verify_T_plus(v, cons, t, subs) do
                 false -> false
                 t     -> verify_T(t, subs, tail)
@@ -589,7 +589,7 @@ defmodule MiniKanren.CLP.Tree do
   defp verify_T_plus(x, cons, t, subs) do
     x = walk(x, subs)
     case var?(x) or x do
-      true -> Dict.update(t, x, cons, fn ls -> (cons ++ ls) |> Enum.uniq end)
+      true -> Map.update(t, x, cons, fn ls -> (cons ++ ls) |> Enum.uniq end)
       [u1 | u2] -> case verify_T_plus(u1, cons, t, subs) do
                      false -> false
                      t0_   -> verify_T_plus(u2, cons, t0_, subs)
@@ -622,7 +622,7 @@ defmodule MiniKanren.CLP.Tree do
   symbols constrained by absento.
   """
   defp subsume_T(subs, d, a, t) do
-    xs = Dict.keys(a)
+    xs = Map.keys(a)
     {d, t} = Enum.reduce(xs, {d, t}, fn (x, {d, t}) -> update_D_T(x, subs, d, a, t) end)
     {d, a, t}
   end
@@ -635,10 +635,10 @@ defmodule MiniKanren.CLP.Tree do
   are turned into disequality constraints. Otherwise, the absento constraints are dropped entirely.
   """
   defp update_D_T(x, subs, d, a, t) do
-    {tag, _pred} = Dict.get(a, x)
+    {tag, _pred} = Map.get(a, x)
     cond do
       tag_eq?(tag, :sym) -> update_D_T_plus(x, subs, d, t)
-      :else -> t = Dict.delete(t, x)
+      :else -> t = Map.delete(t, x)
                {d, t}
     end
   end 
@@ -649,10 +649,10 @@ defmodule MiniKanren.CLP.Tree do
   Shifts any absento constraints on `x` to disequality constraints on `x`.
   """
   defp update_D_T_plus(x, subs, d, t) do
-    case Dict.get(t, x) do
+    case Map.get(t, x) do
       nil -> {d, t}
       ls  -> d = ext_D(x, ls, d, subs)
-             t = Dict.delete(t, x)
+             t = Map.delete(t, x)
              {d, t}
     end
   end

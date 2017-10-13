@@ -21,6 +21,24 @@ defmodule MKImpureTest do
       end
     end
   end
+
+	test "conda checks all assertions of function clause" do
+		bad_func = fn (_) ->
+			succeed()
+			conda do
+				[fail()]
+			end
+		end
+
+		result = run_all([x]) do
+			conda do
+				[bad_func.(x)]
+				[eq(x, :success)]
+			end
+		end
+
+		assert(result == [:success])
+	end
   
   test "condu ignores clauses after first success" do
     result = run_all([x]) do
@@ -41,6 +59,24 @@ defmodule MKImpureTest do
       end
     end
   end
+
+	test "condu checks all assertions of function clause" do
+		bad_func = fn (_) ->
+			succeed()
+			condu do
+				[fail()]
+			end
+		end
+
+		result = run_all([x]) do
+			condu do
+				[bad_func.(x)]
+				[membero(x, [1,2,3])]
+			end
+		end
+
+		assert(result == [1])
+	end
   
   test "onceo succeeds at most once" do
     result = run_all([x]) do

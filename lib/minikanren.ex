@@ -389,7 +389,7 @@ defmodule MiniKanren do
       :mzero -> :mzero
       [_a | _f] -> bind(h, seq)
       pkg when is_tuple(pkg) -> bind(pkg, seq)
-      f  when is_function(f) -> fn -> __conda(f.(), seq) end
+      f  when is_function(f) -> __conda(f.(), seq)
     end
   end
   
@@ -439,7 +439,7 @@ defmodule MiniKanren do
       :mzero -> :mzero
       [a | _f] -> bind(unit(a), seq)
       pkg when is_tuple(pkg) -> bind(pkg, seq)
-      f  when is_function(f) -> fn -> __condu(f.(), seq) end
+      f  when is_function(f) -> __condu(f.(), seq)
     end
   end
   
